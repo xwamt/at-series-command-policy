@@ -1,0 +1,202 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { createShellPolicyEvaluator } from '../../src/shell.ts';
+
+const evaluator = createShellPolicyEvaluator();
+
+async function action(sourceText: string) {
+  return (await evaluator.evaluate({ sourceText })).action;
+}
+
+test('allows the migrated at-terminal observer and transform surface', async () => {
+  const commands = [
+    'ls -la /var/log',
+    'cat /etc/hosts',
+    'tail -n 100 /var/log/service/error.log',
+    'grep -n error /var/log/syslog',
+    'df -h',
+    'du -sh /var/log',
+    'free -m',
+    'netstat -tulnp | grep 8080',
+    'iostat -x 1 3',
+    'pgrep -a service',
+    'stat /etc/hosts',
+    'sort /var/log/sizes | uniq -c | head',
+    'find /var/log -name "*.log" -mtime -1',
+    "awk 'NR>1 {print $4}' /var/log/metrics.log",
+    "sed -n '1,5p' /etc/hosts",
+    '/usr/bin/uptime',
+    'logread | tail -n 30',
+    'which nginx',
+    'command -v nginx',
+    'hostname -f',
+    'date +%s',
+    'git status --short',
+    'crontab -l',
+  ];
+  for (const command of commands) {
+    assert.equal(await action(command), 'allow', command);
+  }
+});
+
+test('reviews writes and command-specific mutation variants', async () => {
+  const commands = [
+    'rm -rf /tmp/generated',
+    'mv a b',
+    'cp -r a b',
+    'tee /tmp/out',
+    'chmod 600 /tmp/key',
+    'kill -9 1234',
+    'find / -delete',
+    'find / -name x -exec rm {} \\;',
+    'sed -i s/a/b/ /etc/hosts',
+    "awk 'BEGIN{system(\"rm -rf /tmp/generated\")}'",
+    'sort -o /tmp/out /var/log/sizes',
+    'ss --kill dst 10.0.0.1',
+    'git push',
+    'date -s "2020-01-01 00:00:00"',
+    'hostname web01',
+    'crontab jobs.txt',
+  ];
+  for (const command of commands) {
+    assert.equal(await action(command), 'review', command);
+  }
+});
+
+test('separates read-only service and network forms from controls', async () => {
+  const cases = [
+    ['systemctl status service', 'allow'],
+    ['systemctl --failed --no-pager', 'allow'],
+    ['systemctl restart service', 'review'],
+    ['journalctl -u service -n 50', 'allow'],
+    ['journalctl --vacuum-size=1M', 'review'],
+    ['ip addr show', 'allow'],
+    ['ip -br addr', 'allow'],
+    ['ip link set eth0 down', 'review'],
+    ['tc -s qdisc show dev eth0', 'allow'],
+    ['tc qdisc replace dev eth0 root fq', 'review'],
+    ['iptables -nvL', 'allow'],
+    ['iptables -A INPUT -j DROP', 'review'],
+    ['nft list ruleset', 'allow'],
+    ['nft flush ruleset', 'review'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
+test('separates read-only container forms from controls', async () => {
+  const cases = [
+    ['docker ps --format "{{.Names}}"', 'allow'],
+    ['docker inspect app', 'allow'],
+    ['docker compose ps', 'allow'],
+    ['docker run image', 'review'],
+    ['docker exec app sh', 'review'],
+    ['kubectl get pods', 'allow'],
+    ['kubectl describe node worker', 'allow'],
+    ['kubectl apply -f deployment.yaml', 'review'],
+    ['virsh list --all', 'allow'],
+    ['virsh destroy guest', 'review'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
+test('recursively analyzes recognized static wrappers', async () => {
+  const cases = [
+    ['sudo -- systemctl status service', 'allow'],
+    ['sudo systemctl restart service', 'review'],
+    ['env LANG=C ls /var/log', 'allow'],
+    ['command -- cat /etc/hosts', 'allow'],
+    ['nice -n 5 ps aux', 'allow'],
+    ['timeout 5s journalctl -n 5', 'allow'],
+    ['busybox cat /etc/hosts', 'allow'],
+    ['busybox rm /tmp/generated', 'review'],
+    ["bash -c 'uname -a; uptime'", 'allow'],
+    ["sh -c 'rm /tmp/generated'", 'review'],
+    ['bash -c "$SCRIPT"', 'review'],
+    ['eval "uname -a"', 'review'],
+    ['source /tmp/script', 'review'],
+    ['exec uname -a', 'review'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
+test('implements the strict curl method, body, output, and credential contract', async () => {
+  const cases = [
+    ['curl https://example.invalid/health', 'allow'],
+    ['curl --head https://example.invalid/health', 'allow'],
+    ['curl -X GET --url https://example.invalid/health', 'allow'],
+    ['curl --request=HEAD https://example.invalid/health', 'allow'],
+    ['curl -d value https://example.invalid/', 'review'],
+    ['curl -X DELETE https://example.invalid/item', 'review'],
+    ['curl -T /tmp/file https://example.invalid/', 'review'],
+    ['curl -o /tmp/out https://example.invalid/', 'review'],
+    [
+      'curl -H "Authorization: Bearer redacted" https://example.invalid/',
+      'review',
+    ],
+    ['curl https://user:password@example.invalid/', 'review'],
+    ['curl http://169.254.169.254/latest/meta-data/', 'review'],
+    ['curl --config /tmp/options', 'review'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
+test('reviews sensitive paths, unknown commands, and executable masquerading', async () => {
+  const commands = [
+    'cat /etc/shadow',
+    'cat ~/.ssh/id_ed25519',
+    'grep token .env',
+    '/tmp/systemctl status service',
+    './inspect.sh',
+    'custom-observer --status',
+  ];
+  for (const command of commands) {
+    assert.equal(await action(command), 'review', command);
+  }
+});
+
+test('preserves quoted multiline python payloads', async () => {
+  assert.equal(
+    await action(
+      [
+        'sudo python3 -c "',
+        'import json',
+        'print(json.loads(\'{"value": 1}\')["value"])',
+        '"',
+      ].join('\n'),
+    ),
+    'allow',
+  );
+});
+
+test('analyzes static interpreter and datastore payloads instead of trusting names', async () => {
+  const cases = [
+    ["python3 -c 'print(1 + 2)'", 'allow'],
+    ["python -c 'open(\"/tmp/generated\", \"w\").write(\"value\")'", 'review'],
+    ['python3 -c "$PYTHON_CODE"', 'review'],
+    ['python3 /tmp/script.py', 'review'],
+    ["sqlite3 /tmp/application.db '.tables'", 'allow'],
+    ["sqlite3 /tmp/application.db '.schema users'", 'allow'],
+    ["sqlite3 /tmp/application.db '.backup /tmp/copy.db'", 'review'],
+    ["sqlite3 /tmp/application.db 'SELECT id FROM users'", 'allow'],
+    ["sqlite3 /tmp/application.db 'SELECT password_hash FROM users'", 'review'],
+    ["sqlite3 /tmp/application.db 'DELETE FROM users'", 'review'],
+    ["mysql --execute 'SHOW STATUS' application", 'allow'],
+    ["mysql -e 'UPDATE users SET name=\"changed\"' application", 'review'],
+    ["mysql --password=secret -e 'SELECT id FROM users' application", 'review'],
+    ['redis-cli GET cache:item', 'allow'],
+    ['redis-cli SET cache:item value', 'review'],
+    ['redis-cli BLPOP queue 0', 'deny'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
