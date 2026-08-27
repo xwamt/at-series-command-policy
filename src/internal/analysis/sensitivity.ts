@@ -8,6 +8,22 @@ export function isSensitiveIdentifier(identifier: string): boolean {
   );
 }
 
+const sensitiveDirectorySegments = new Set([
+  '.ssh',
+  '.aws',
+  '.azure',
+  '.kube',
+  '.gnupg',
+  '.docker',
+  'credentials',
+  'secrets',
+  'serviceaccount',
+  'service-account',
+]);
+
+const sensitiveProcPattern =
+  /^\/proc\/(?:self|\d+)\/(?:environ|cmdline|maps|mem)$/;
+
 export function isSensitivePath(path: string): boolean {
   const normalized = path.replaceAll('\\', '/').toLowerCase();
   const segments = normalized.split('/').filter(Boolean);
@@ -16,16 +32,18 @@ export function isSensitivePath(path: string): boolean {
   if (
     normalized === '/etc/shadow' ||
     normalized === '/etc/gshadow' ||
-    normalized.includes('/.ssh/') ||
-    normalized.includes('/.aws/') ||
-    normalized.includes('/.azure/') ||
-    normalized.includes('/.kube/') ||
-    normalized.includes('/.config/gcloud/') ||
-    normalized.includes('/.docker/config.json') ||
-    normalized.includes('/credentials/') ||
-    normalized.includes('/secrets/') ||
-    normalized.includes('/serviceaccount/') ||
-    normalized.includes('/service-account/')
+    sensitiveProcPattern.test(normalized)
+  ) {
+    return true;
+  }
+  if (segments.some((segment) => sensitiveDirectorySegments.has(segment))) {
+    return true;
+  }
+  if (
+    segments.some(
+      (segment, index) =>
+        segment === '.config' && segments[index + 1] === 'gcloud',
+    )
   ) {
     return true;
   }

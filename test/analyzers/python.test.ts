@@ -38,6 +38,16 @@ test('allows explicit ordinary file reads and reviews sensitive reads or writes'
   }
 });
 
+test('reviews reads of sensitive /proc entries', async () => {
+  const sources = [
+    'print(open("/proc/self/environ").read())',
+    'print(open("/proc/1/environ").read())',
+  ];
+  for (const source of sources) {
+    assert.equal(await action(source), 'review', source);
+  }
+});
+
 test('analyzes static sqlite3 read scripts instead of rejecting the import', async () => {
   const sources = [
     [
