@@ -76,18 +76,21 @@ test('source ranges preserve UTF-16 and CRLF without normalization', async () =>
     cwd: '/sensitive/cwd',
   });
 
-  assert.deepEqual(result.evidence[0]?.location, {
-    start: {
-      offset: 0,
-      line: 1,
-      column: 1,
+  const locations = result.evidence
+    .map((entry) => entry.location)
+    .sort((first, second) => first.start.offset - second.start.offset);
+  assert.deepEqual(locations, [
+    {
+      // The emoji occupies two UTF-16 code units on line one.
+      start: { offset: 0, line: 1, column: 1 },
+      end: { offset: 2, line: 1, column: 3 },
     },
-    end: {
-      offset: 5,
-      line: 2,
-      column: 2,
+    {
+      // CRLF stays two code units, so line two starts at offset four.
+      start: { offset: 4, line: 2, column: 1 },
+      end: { offset: 5, line: 2, column: 2 },
     },
-  });
+  ]);
   assert.equal(JSON.stringify(result).includes(sourceText), false);
   assert.equal(JSON.stringify(result).includes('/sensitive/cwd'), false);
 });

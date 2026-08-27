@@ -6,6 +6,7 @@ import type {
 import {
   POLICY_DECISION_SCHEMA_VERSION,
   POLICY_PACKAGE_VERSION,
+  POLICY_RULE_VERSIONS,
 } from '../core/version.js';
 import type { PolicyDomain, PolicyFailure } from './failure-types.js';
 import { createFailureEvidence } from './redacted-evidence.js';
@@ -47,8 +48,8 @@ export function createFailClosedDecision({
     versions: {
       policy: POLICY_PACKAGE_VERSION,
       rules: {
-        core: POLICY_PACKAGE_VERSION,
-        [domain]: POLICY_PACKAGE_VERSION,
+        core: POLICY_RULE_VERSIONS.core,
+        [domain]: POLICY_RULE_VERSIONS[domain],
       },
       parsers: {
         [domain]: 'unavailable',

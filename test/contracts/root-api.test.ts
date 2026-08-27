@@ -103,7 +103,12 @@ test('combinePolicyDecisions fail-closes malformed runtime decisions', () => {
       versions: {
         policy: '0.1.0',
         rules: {
-          core: '0.1.0',
+          core: '0.1.1',
+          mysql: '0.1.1',
+          python: '0.1.0',
+          redis: '0.1.1',
+          shell: '0.1.1',
+          sqlite: '0.1.1',
         },
         parsers: {
           mysql: 'node-sql-parser@5.4.0/mysql',
@@ -211,7 +216,12 @@ test('root version metadata is stable and detached from parser internals', () =>
     schemaVersion: '1.0.0',
     policy: '0.1.0',
     rules: {
-      core: '0.1.0',
+      core: '0.1.1',
+      mysql: '0.1.1',
+      python: '0.1.0',
+      redis: '0.1.1',
+      shell: '0.1.1',
+      sqlite: '0.1.1',
     },
     parsers: {
       mysql: 'node-sql-parser@5.4.0/mysql',
