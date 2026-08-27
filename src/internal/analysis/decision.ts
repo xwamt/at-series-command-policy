@@ -27,6 +27,11 @@ export interface AnalyzedEffect {
   readonly kind: PolicyEvidenceKind;
   /** Must be controlled static text, never source-derived text. */
   readonly summary: string;
+  /**
+   * Optional narrowed range over the exact input sourceText. When omitted the
+   * evidence falls back to the whole-source location.
+   */
+  readonly location?: SourceLocation;
 }
 
 function wholeSourceLocation(sourceText: string): SourceLocation {
@@ -76,11 +81,11 @@ export function createAnalyzedDecision(
     }
   }
 
-  const location = wholeSourceLocation(sourceText);
+  const fallbackLocation = wholeSourceLocation(sourceText);
   const evidence: PolicyEvidence[] = effectsToUse.map((effect) =>
     Object.freeze({
       kind: effect.kind,
-      location,
+      location: effect.location ?? fallbackLocation,
       redacted: true as const,
       summary: effect.summary,
     }),

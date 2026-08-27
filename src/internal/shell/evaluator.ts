@@ -3,6 +3,7 @@ import type {
   PolicyAssetResolver,
   PolicyEvaluationInput,
   PolicyEvaluator,
+  SourceLocation,
 } from '../../index.js';
 import {
   createAnalyzedDecision,
@@ -115,6 +116,20 @@ function nestedFailureEffect(): AnalyzedEffect {
   };
 }
 
+/**
+ * Rebases effects onto an IR node's location. Effects produced for nested
+ * payloads carry payload-relative locations, so the enclosing node's location
+ * always wins; effects stay untouched when the node location is unknown.
+ */
+function withLocation(
+  effects: readonly AnalyzedEffect[],
+  location: SourceLocation | undefined,
+): readonly AnalyzedEffect[] {
+  return location
+    ? effects.map((effect) => ({ ...effect, location }))
+    : effects;
+}
+
 export function createDeterministicShellEvaluator(
   options: InternalShellEvaluatorOptions,
 ): PolicyEvaluator {
@@ -202,16 +217,20 @@ export function createDeterministicShellEvaluator(
             command,
             options.embeddedEvaluators,
           );
+          const commandEffects =
+            embedded ??
+            (await analyzeShellCommand(command, {
+              analyzeNestedShell,
+              analyzeEmbedded: (nestedCommand) =>
+                analyzeEmbeddedCommand(nestedCommand, options.embeddedEvaluators),
+            }));
+          effects.push(...withLocation(commandEffects, command.location));
+        }
+        for (const redirect of ir.redirects) {
           effects.push(
-            ...(embedded ??
-              (await analyzeShellCommand(command, {
-                analyzeNestedShell,
-                analyzeEmbedded: (nestedCommand) =>
-                  analyzeEmbeddedCommand(nestedCommand, options.embeddedEvaluators),
-              }))),
+            ...withLocation([redirectEffect(redirect)], redirect.location),
           );
         }
-        effects.push(...ir.redirects.map(redirectEffect));
         if (ir.unsupported) {
           effects.push(unsupportedEffect());
         }
