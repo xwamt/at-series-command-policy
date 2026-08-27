@@ -3,8 +3,18 @@ import type { PolicyPackageVersionMetadata } from '../index.js';
 export const POLICY_DECISION_SCHEMA_VERSION = '1.0.0';
 export const POLICY_PACKAGE_VERSION = '0.1.0';
 
-const ruleVersions = Object.freeze({
-  core: POLICY_PACKAGE_VERSION,
+/**
+ * Per-domain rule-table versions. These evolve independently from
+ * POLICY_PACKAGE_VERSION: a domain's entry is bumped when that domain's rule
+ * tables change, without requiring a package release for every domain.
+ */
+export const POLICY_RULE_VERSIONS = Object.freeze({
+  core: '0.1.1',
+  shell: '0.1.1',
+  python: '0.1.0',
+  sqlite: '0.1.1',
+  mysql: '0.1.1',
+  redis: '0.1.1',
 });
 
 const parserVersions = Object.freeze({
@@ -19,6 +29,6 @@ export const POLICY_VERSION_METADATA: PolicyPackageVersionMetadata =
   Object.freeze({
     schemaVersion: POLICY_DECISION_SCHEMA_VERSION,
     policy: POLICY_PACKAGE_VERSION,
-    rules: ruleVersions,
+    rules: POLICY_RULE_VERSIONS,
     parsers: parserVersions,
   });
