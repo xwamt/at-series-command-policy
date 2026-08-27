@@ -15,9 +15,9 @@ import {
 } from '../analysis/limits.js';
 import { createFailClosedDecision } from '../fail-closed.js';
 import {
-  isKnownSecretTable,
   isRecord,
   isSensitiveSqlName,
+  isSensitiveTableRef,
   pureSqlFunctions,
   readEffect,
   reviewEffect,
@@ -74,6 +74,12 @@ function functionName(node: UnknownRecord): string | undefined {
   return nestedName(node.name)?.toLowerCase();
 }
 
+// QualifiedName nodes hold the schema qualifier (e.g. `main.credentials`)
+// in `dbName`; unqualified table names omit the field.
+function qualifierName(value: unknown): string | undefined {
+  return isRecord(value) ? nestedName(value.dbName) : undefined;
+}
+
 function analyzeSelect(
   statement: unknown,
   limits: PolicyAnalysisLimits,
@@ -82,12 +88,18 @@ function analyzeSelect(
   if (!records) {
     return reviewEffect('sqlite', 'unknown');
   }
-  const tables = records
-    .filter((node) => node.type === 'TableSelectTable')
-    .map((node) => nestedName(node.tblName))
-    .filter((name): name is string => name !== undefined);
-  if (tables.some((table) => isKnownSecretTable(table) || isSensitiveSqlName(table))) {
-    return reviewEffect('sqlite', 'sensitive_read');
+  for (const node of records) {
+    if (node.type !== 'TableSelectTable') {
+      continue;
+    }
+    const table = nestedName(node.tblName);
+    if (table === undefined) {
+      continue;
+    }
+    const schema = qualifierName(node.tblName);
+    if (isSensitiveTableRef(schema, table) || isSensitiveSqlName(table)) {
+      return reviewEffect('sqlite', 'sensitive_read');
+    }
   }
   if (
     records.some(
