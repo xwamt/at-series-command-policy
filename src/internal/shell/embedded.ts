@@ -280,6 +280,21 @@ async function analyzeRedis(
     : unknownEmbedded('redis');
 }
 
+function versionOrHelpOnly(
+  args: readonly (string | undefined)[],
+): boolean {
+  return (
+    args.length > 0 &&
+    args.every(
+      (argument) =>
+        argument === '--version' ||
+        argument === '-V' ||
+        argument === '--help' ||
+        argument === '-h',
+    )
+  );
+}
+
 export async function analyzeEmbeddedCommand(
   command: ShellCommandIr,
   loaders: EmbeddedEvaluatorLoaders,
@@ -289,6 +304,10 @@ export async function analyzeEmbeddedCommand(
     return undefined;
   }
   if (/^python3?(?:\.\d+)*$/.test(name)) {
+    // Let `--version`/`--help` fall through to shell contracts.
+    if (versionOrHelpOnly(command.arguments)) {
+      return undefined;
+    }
     return analyzePython(command, loaders);
   }
   if (name === 'sqlite3') {
