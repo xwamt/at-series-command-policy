@@ -25,9 +25,27 @@ test('allows recognized non-blocking read-only Redis commands', async () => {
     'INFO server',
     'DBSIZE',
     'PING',
+    'SORT_RO mylist',
+    'HELLO',
+    'HELLO 3',
+    'LOLWUT',
+    'LOLWUT VERSION 5',
   ];
   for (const command of commands) {
     assert.equal(await action(command), 'allow', command);
+  }
+});
+
+test('keeps control-plane and authenticating command forms out of the read table', async () => {
+  const commands = [
+    'SORT mylist',
+    'COMMAND FLUSH',
+    'COMMAND DOCS GET',
+    'RESET',
+    'HELLO 3 AUTH user secret',
+  ];
+  for (const command of commands) {
+    assert.equal(await action(command), 'review', command);
   }
 });
 

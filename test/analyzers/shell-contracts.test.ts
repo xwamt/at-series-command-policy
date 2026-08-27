@@ -177,6 +177,154 @@ test('preserves quoted multiline python payloads', async () => {
   );
 });
 
+test('classifies file operands of transform commands instead of allowing unconditionally', async () => {
+  const cases = [
+    ['wc -l /var/log/syslog', 'allow'],
+    ['cut -d: -f1 /etc/hosts', 'allow'],
+    ['tr -d x', 'allow'],
+    ['uniq -c /var/log/list', 'allow'],
+    ['jq .', 'allow'],
+    ['jq .status /tmp/response.json', 'allow'],
+    ['wc -l ~/.aws/credentials', 'review'],
+    ['cut -c1 /root/.ssh/id_rsa', 'review'],
+    ['jq .key ~/.kube/config', 'review'],
+    ['uniq ~/.netrc', 'review'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
+test('reviews awk and sed forms that execute commands or write files', async () => {
+  const cases = [
+    ['awk \'BEGIN{"id"|getline x; print x}\'', 'review'],
+    ['awk \'BEGIN{"cmd" |& getline line}\'', 'review'],
+    ['awk -f /tmp/prog.awk /etc/hosts', 'review'],
+    ["awk '{print $1}' /etc/hosts", 'allow'],
+    ["awk -F: '{print $1}' /var/log/report", 'allow'],
+    ["awk -v limit=10 'NR<limit' /var/log/report", 'allow'],
+    ["sed 'w /tmp/out' /etc/hosts", 'review'],
+    ["sed -e 'w /tmp/out' /etc/hosts", 'review'],
+    ["sed 's/a/b/w /tmp/out' /etc/hosts", 'review'],
+    ["sed '1e touch /tmp/marker' /etc/hosts", 'review'],
+    ['sed -f /tmp/script.sed /etc/hosts', 'review'],
+    ["sed -i.bak 's/a/b/' /etc/hosts", 'review'],
+    ["sed -n '1,5p' /etc/hosts", 'allow'],
+    ["sed 's/error/warning/g' /var/log/syslog", 'allow'],
+    ["sed -n -e '1p' -e '$p' /etc/hosts", 'allow'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
+test('classifies paths for the read-only viewer and encoder commands', async () => {
+  const cases = [
+    ['xxd /etc/hosts', 'allow'],
+    ['strings /etc/hosts', 'allow'],
+    ['od -c /etc/hosts', 'allow'],
+    ['hexdump -C /etc/hosts', 'allow'],
+    ['base64 /etc/hosts', 'allow'],
+    ['base32 /etc/hosts', 'allow'],
+    ['nl /etc/hosts', 'allow'],
+    ['fold -s /var/log/syslog', 'allow'],
+    ['expand /tmp/notes.txt', 'allow'],
+    ['unexpand /tmp/notes.txt', 'allow'],
+    ['namei /var/log/syslog', 'allow'],
+    ['tree /var/log', 'allow'],
+    ['lsattr /tmp', 'allow'],
+    ['xxd ~/.ssh/id_rsa', 'review'],
+    ['strings /etc/shadow', 'review'],
+    ['base64 ~/.aws/credentials', 'review'],
+    ['less /etc/hosts', 'review'],
+    ['more /etc/hosts', 'review'],
+    ['view /etc/hosts', 'review'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
+test('recursively analyzes the added wrappers while keeping xargs reviewed', async () => {
+  const cases = [
+    ['nohup uname -a', 'allow'],
+    ['nohup rm -rf /tmp/generated', 'review'],
+    ['setsid ps aux', 'allow'],
+    ['time uname -a', 'allow'],
+    ['time ls /var/log', 'allow'],
+    ['time --output=/tmp/out ls', 'review'],
+    ['watch -n 5 free -m', 'allow'],
+    ['watch rm -rf /tmp/generated', 'review'],
+    ['xargs cat', 'review'],
+    ['xargs rm', 'review'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
+test('treats bare env as process-local and finds -c inside short option clusters', async () => {
+  const cases = [
+    ['env', 'allow'],
+    ['env LANG=C', 'allow'],
+    ['env LD_PRELOAD=/tmp/x.so', 'review'],
+    ['printenv', 'allow'],
+    ['printenv HOME', 'allow'],
+    ["bash -lc 'uname -a'", 'allow'],
+    ["bash -xc 'uptime'", 'allow'],
+    ["sh -euc 'uname -a'", 'allow'],
+    ["bash -lc 'rm -rf /tmp/generated'", 'review'],
+    ['bash -lc "$SCRIPT"', 'review'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
+test('separates read-only package manager queries from mutations', async () => {
+  const cases = [
+    ['apt list --installed', 'allow'],
+    ['apt show curl', 'allow'],
+    ['apt search vim', 'allow'],
+    ['apt policy curl', 'allow'],
+    ['apt install curl', 'review'],
+    ['apt-get -s install curl', 'allow'],
+    ['apt-get --dry-run upgrade', 'allow'],
+    ['apt-get install curl', 'review'],
+    ['apt-get update', 'review'],
+    ['yum list installed', 'allow'],
+    ['yum info curl', 'allow'],
+    ['yum install curl', 'review'],
+    ['npm ls', 'allow'],
+    ['npm view lodash version', 'allow'],
+    ['npm outdated', 'allow'],
+    ['npm ping', 'allow'],
+    ['npm install lodash', 'review'],
+    ['npm run build', 'review'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
+test('allows version and help probes without opening up unknown binaries', async () => {
+  const cases = [
+    ['node --version', 'allow'],
+    ['node --help', 'allow'],
+    ['node', 'review'],
+    ['node script.js', 'review'],
+    ['openssl version', 'allow'],
+    ['openssl version -a', 'allow'],
+    ['openssl enc -d', 'review'],
+    ['rm --help', 'review'],
+    ['custom-binary --version', 'allow'],
+    ['custom-binary --version --extra', 'review'],
+  ] as const;
+  for (const [command, expected] of cases) {
+    assert.equal(await action(command), expected, command);
+  }
+});
+
 test('analyzes static interpreter and datastore payloads instead of trusting names', async () => {
   const cases = [
     ["python3 -c 'print(1 + 2)'", 'allow'],
