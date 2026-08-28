@@ -342,5 +342,21 @@
     "sourceText": "eval(\"1+1\")",
     "expectedAction": "review",
     "class": "regression"
+  },
+  {
+    "id": "acc-044",
+    "domain": "mysql",
+    "family": "executable-comment",
+    "sourceText": "SELECT 1 /*! , authentication_string FROM mysql.user */",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-045",
+    "domain": "shell",
+    "family": "executable-comment",
+    "sourceText": "mysql -e 'SELECT 1 /*! , authentication_string FROM mysql.user */'",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
   }
 ]

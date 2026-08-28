@@ -106,6 +106,34 @@ test('MySQL still allows ordinary reads and metadata with schema checks in place
   }
 });
 
+test('MySQL executable comments fail closed to review', async () => {
+  const smuggled = await mysql.evaluate({
+    sourceText: 'SELECT 1 /*! , authentication_string FROM mysql.user */',
+  });
+  assert.equal(smuggled.action, 'review');
+  assert.equal(smuggled.reasonCode, 'mysql.unknown');
+
+  const versioned = await mysql.evaluate({
+    sourceText: 'SELECT /*!40001 SQL_NO_CACHE */ id FROM users',
+  });
+  assert.equal(versioned.action, 'review');
+
+  // Known conservative over-review: the pre-scan is textual, so `/*!` inside a
+  // string literal also reviews. Stricter is acceptable (fail-closed).
+  assert.equal(
+    (await mysqlAction("SELECT '/*!' AS marker")),
+    'review',
+  );
+
+  // Plain comments and ordinary reads are unaffected.
+  assert.equal(
+    await mysqlAction('SELECT id FROM users /* plain */'),
+    'allow',
+  );
+  assert.equal(await mysqlAction('SELECT id FROM users'), 'allow');
+  assert.equal(await mysqlAction('SELECT * FROM mysql.user'), 'review');
+});
+
 test('SQLite table sensitivity behavior is unchanged by schema qualification', async () => {
   assert.equal(await sqliteAction('SELECT id, name FROM users'), 'allow');
   assert.equal(await sqliteAction('SELECT * FROM credentials'), 'review');
