@@ -81,11 +81,13 @@ export function createAnalyzedDecision(
     }
   }
 
-  const fallbackLocation = wholeSourceLocation(sourceText);
+  let fallbackLocation: SourceLocation | undefined;
+  const fallback = (): SourceLocation =>
+    (fallbackLocation ??= wholeSourceLocation(sourceText));
   const evidence: PolicyEvidence[] = effectsToUse.map((effect) =>
     Object.freeze({
       kind: effect.kind,
-      location: effect.location ?? fallbackLocation,
+      location: effect.location ?? fallback(),
       redacted: true as const,
       summary: effect.summary,
     }),
