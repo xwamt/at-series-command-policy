@@ -1062,8 +1062,9 @@ export async function analyzeShellCommand(
   command: ShellCommandIr,
   hooks?: ShellContractHooks,
   wrapperDepth = 0,
+  normalizedName = normalizeExecutable(command.name),
 ): Promise<readonly AnalyzedEffect[]> {
-  const name = normalizeExecutable(command.name);
+  const name = normalizedName;
   if (!name) {
     return [unknown()];
   }
