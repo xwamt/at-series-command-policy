@@ -5,6 +5,7 @@ import type {
   PolicyEvaluator,
 } from './index.js';
 import { createDeterministicShellEvaluator } from './internal/shell/evaluator.js';
+import { createTreeSitterParser } from './internal/tree-sitter/runtime.js';
 
 export type ShellPolicyInput = PolicyEvaluationInput;
 export type ShellPolicyEvaluator = PolicyEvaluator<ShellPolicyInput>;
@@ -12,6 +13,21 @@ export type ShellPolicyEvaluator = PolicyEvaluator<ShellPolicyInput>;
 export interface ShellPolicyEvaluatorOptions {
   readonly assetResolver?: PolicyAssetResolver;
   readonly limits?: Partial<PolicyAnalysisLimits>;
+}
+
+/**
+ * Optionally pre-initializes the tree-sitter runtime and bash grammar so the
+ * first evaluate() call pays no cold-start cost. Failures reject here, but
+ * evaluators stay independent and still fail closed to review on evaluate().
+ */
+export async function warmupShellPolicyEvaluator(
+  options: Pick<ShellPolicyEvaluatorOptions, 'assetResolver'> = {},
+): Promise<void> {
+  const handle = await createTreeSitterParser(
+    'tree-sitter-bash',
+    options.assetResolver,
+  );
+  handle.dispose();
 }
 
 export function createShellPolicyEvaluator(

@@ -81,19 +81,57 @@ async function initializeRuntime(
         await Parser.init({ locateFile: () => source });
       }
     })();
+    // Success stays first-wins (Parser.init is an Emscripten global), but a
+    // failure must not poison every later evaluator in the process.
+    runtimeInitialization.catch(() => {
+      runtimeInitialization = undefined;
+    });
   }
   await runtimeInitialization;
 }
 
+type LanguageId = 'tree-sitter-bash' | 'tree-sitter-python';
+
+const defaultLanguageCache = new Map<LanguageId, Promise<Language>>();
+const resolverLanguageCaches = new WeakMap<
+  PolicyAssetResolver,
+  Map<LanguageId, Promise<Language>>
+>();
+
+function languageCacheFor(
+  resolver: PolicyAssetResolver | undefined,
+): Map<LanguageId, Promise<Language>> {
+  if (!resolver) {
+    return defaultLanguageCache;
+  }
+  let cache = resolverLanguageCaches.get(resolver);
+  if (!cache) {
+    cache = new Map();
+    resolverLanguageCaches.set(resolver, cache);
+  }
+  return cache;
+}
+
 async function loadLanguage(
-  id: 'tree-sitter-bash' | 'tree-sitter-python',
+  id: LanguageId,
   resolver: PolicyAssetResolver | undefined,
 ): Promise<Language> {
-  await initializeRuntime(resolver);
-  const source = sourceForLoader(
-    await (resolver ?? defaultResolveAsset)(assetById[id]),
-  );
-  return Language.load(source);
+  const cache = languageCacheFor(resolver);
+  let pending = cache.get(id);
+  if (!pending) {
+    pending = (async () => {
+      await initializeRuntime(resolver);
+      const source = sourceForLoader(
+        await (resolver ?? defaultResolveAsset)(assetById[id]),
+      );
+      return Language.load(source);
+    })();
+    cache.set(id, pending);
+    // Never cache failures: this avoids poisoning later calls that share the
+    // resolver and keeps the fail-closed retry path alive.
+    pending.catch(() => cache.delete(id));
+  }
+  return pending;
 }
 
 export interface TreeSitterParserHandle {
