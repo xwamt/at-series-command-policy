@@ -28,7 +28,7 @@ map trust levels, show UI, write logs, or execute commands.
 | Import | Factory |
 | --- | --- |
 | `@at-series/command-policy` | types, `combinePolicyDecisions`, `POLICY_*` constants |
-| `@at-series/command-policy/shell` | `createShellPolicyEvaluator` |
+| `@at-series/command-policy/shell` | `createShellPolicyEvaluator`, `warmupShellPolicyEvaluator` |
 | `@at-series/command-policy/python` | `createPythonPolicyEvaluator` |
 | `@at-series/command-policy/sqlite` | `createSqlitePolicyEvaluator` |
 | `@at-series/command-policy/mysql` | `createMysqlPolicyEvaluator` |
@@ -68,6 +68,19 @@ Options on language factories:
 
 SQL and Redis factories take `limits` only. Python and Shell also take
 `assetResolver` for Tree-sitter WASM.
+
+## Warmup (optional)
+
+```ts
+import { warmupShellPolicyEvaluator } from '@at-series/command-policy/shell';
+
+await warmupShellPolicyEvaluator({ assetResolver });
+```
+
+Pre-initializes the Tree-sitter runtime and the bash grammar so the first
+`evaluate()` pays no cold-start cost. Entirely optional: a warmup failure
+rejects here, but evaluators stay independent and still fail closed to
+`review` on `evaluate()`.
 
 ## `PolicyDecision`
 
@@ -136,9 +149,26 @@ const evaluator = createShellPolicyEvaluator({
 Allowlist: `web-tree-sitter.wasm`, `tree-sitter-bash.wasm`,
 `tree-sitter-python.wasm`.
 
-After a CJS rebundle, set `import.meta.url` to
-`pathToFileURL(__filename).href` or pass file bytes through `assetResolver`.
-Otherwise initialization fail-closes to `review`.
+`copyPolicyAssets` options:
+
+| Option | Meaning |
+| --- | --- |
+| `destinationDirectory` | Required. Created recursively. |
+| `include` | Optional allowlist of asset ids. Default: the complete `POLICY_ASSET_MANIFEST` (all three files, today's behavior). Unknown ids throw a `TypeError`. |
+
+Omitting an asset trades accuracy for size, never safety: evaluators that
+need it fail closed to `review`. Without `tree-sitter-python`, every
+`python3 -c` payload reviews with reason code
+`shell.embedded_python_review`. `tree-sitter-runtime` and
+`tree-sitter-bash` are hard dependencies of the shell domain — without
+them every shell evaluation reviews with `policy.initialization_failed`.
+
+After a CJS rebundle, define `import.meta.url` as
+`pathToFileURL(__filename).href` (esbuild: inject a `banner` and map it
+with `define`; full recipe in the README's *Bundled consumers* section)
+and pass file bytes or absolute paths through `assetResolver`. Skipping
+the define produces no build or runtime error: embedded Python analysis
+silently fail-closes and every `python3 -c` payload becomes `review`.
 
 ## Plugin mapping (AT Terminal)
 
