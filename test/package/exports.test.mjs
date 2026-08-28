@@ -12,7 +12,10 @@ const runtimeExports = {
     'POLICY_VERSION_METADATA',
     'combinePolicyDecisions',
   ],
-  '@at-series/command-policy/shell': ['createShellPolicyEvaluator'],
+  '@at-series/command-policy/shell': [
+    'createShellPolicyEvaluator',
+    'warmupShellPolicyEvaluator',
+  ],
   '@at-series/command-policy/python': ['createPythonPolicyEvaluator'],
   '@at-series/command-policy/sqlite': ['createSqlitePolicyEvaluator'],
   '@at-series/command-policy/mysql': ['createMysqlPolicyEvaluator'],
@@ -55,6 +58,12 @@ test('internal modules are blocked by package exports', async () => {
     code: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
   });
   assert.throws(() => require(internalSpecifier), {
+    code: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
+  });
+
+  // The shared runtime chunk is a package-internal sibling file, not a
+  // public entry point.
+  await assert.rejects(import('@at-series/command-policy/tree-sitter-runtime'), {
     code: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
   });
 });
