@@ -183,15 +183,15 @@ export function parseShellIr(
     const commands: ShellCommandIr[] = [];
     const redirects: ShellRedirectIr[] = [];
     const budget = new WorkBudget(limits.maxWorkUnits);
-    const pending: { node: SyntaxNode; depth: number }[] = [
-      { node: tree.rootNode, depth: 1 },
-    ];
+    const pendingNodes: SyntaxNode[] = [tree.rootNode];
+    const pendingDepths: number[] = [1];
     let nodeCount = 0;
     let unsupported = false;
     let background = false;
 
-    while (pending.length > 0) {
-      const { node, depth } = pending.pop()!;
+    while (pendingNodes.length > 0) {
+      const node = pendingNodes.pop()!;
+      const depth = pendingDepths.pop()!;
       nodeCount += 1;
       if (
         nodeCount > limits.maxAstNodes ||
@@ -203,23 +203,26 @@ export function parseShellIr(
       if (node.isError || node.isMissing) {
         return { ok: false, failure: 'parse-failed' };
       }
-      if (unsupportedNodeTypes.has(node.type)) {
+      const type = node.type;
+      if (unsupportedNodeTypes.has(type)) {
         unsupported = true;
       }
-      if (node.type === 'command') {
+      if (type === 'command') {
         commands.push(commandFromNode(node));
         if (commands.length > limits.maxStatements) {
           return { ok: false, failure: 'resource-limit-exceeded' };
         }
-      } else if (node.type === 'file_redirect') {
+      } else if (type === 'file_redirect') {
         redirects.push(redirectFromNode(node));
       }
 
+      const childDepth = depth + 1;
       for (const child of node.children) {
         if (child.type === '&') {
           background = true;
         }
-        pending.push({ node: child, depth: depth + 1 });
+        pendingNodes.push(child);
+        pendingDepths.push(childDepth);
       }
     }
 
