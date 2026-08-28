@@ -44,6 +44,8 @@ test('npm tarball contains only public package artifacts', () => {
     'dist/assets/tree-sitter-bash.wasm',
     'dist/assets/tree-sitter-python.wasm',
     'dist/assets/web-tree-sitter.wasm',
+    'dist/tree-sitter-runtime.js',
+    'dist/tree-sitter-runtime.cjs',
     'package.json',
     ...publicEntries.flatMap((entry) => [
       `dist/${entry}.cjs`,
