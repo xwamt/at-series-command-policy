@@ -1,0 +1,346 @@
+[
+  {
+    "id": "acc-001",
+    "domain": "shell",
+    "family": "cut-jq-wc",
+    "sourceText": "wc -l ~/.aws/credentials",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-002",
+    "domain": "shell",
+    "family": "cut-jq-wc",
+    "sourceText": "cut -c1 /root/.ssh/id_rsa",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-003",
+    "domain": "shell",
+    "family": "cut-jq-wc",
+    "sourceText": "jq .key ~/.kube/config",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-004",
+    "domain": "shell",
+    "family": "awk",
+    "sourceText": "awk 'BEGIN{\"id\"|getline x; print x}'",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-005",
+    "domain": "shell",
+    "family": "awk",
+    "sourceText": "awk -f /tmp/prog.awk /etc/hosts",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-006",
+    "domain": "shell",
+    "family": "sensitive-path",
+    "sourceText": "cat ~/.ssh",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-007",
+    "domain": "shell",
+    "family": "sensitive-path",
+    "sourceText": "ls /root/.ssh",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-008",
+    "domain": "shell",
+    "family": "sensitive-path",
+    "sourceText": "cat /proc/self/environ",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-009",
+    "domain": "shell",
+    "family": "sed",
+    "sourceText": "sed 'w /tmp/out' /etc/hosts",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-010",
+    "domain": "mysql",
+    "family": "mysql-schema",
+    "sourceText": "SELECT * FROM mysql.user",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-011",
+    "domain": "mysql",
+    "family": "mysql-schema",
+    "sourceText": "SELECT Host, User, authentication_string FROM mysql.user",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-012",
+    "domain": "mysql",
+    "family": "mysql-schema",
+    "sourceText": "SELECT * FROM users UNION SELECT * FROM mysql.user",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-013",
+    "domain": "mysql",
+    "family": "mysql-schema",
+    "sourceText": "SELECT grantee FROM information_schema.user_privileges",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-014",
+    "domain": "python",
+    "family": "sensitive-path",
+    "sourceText": "print(open(\"/proc/self/environ\").read())",
+    "expectedAction": "review",
+    "class": "false_allow_fix"
+  },
+  {
+    "id": "acc-015",
+    "domain": "shell",
+    "family": "env-read",
+    "sourceText": "printenv",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-016",
+    "domain": "shell",
+    "family": "env-read",
+    "sourceText": "env",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-017",
+    "domain": "shell",
+    "family": "version-help",
+    "sourceText": "node --version",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-018",
+    "domain": "shell",
+    "family": "version-help",
+    "sourceText": "python3 --version",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-019",
+    "domain": "shell",
+    "family": "file-reader",
+    "sourceText": "xxd /etc/hosts",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-020",
+    "domain": "shell",
+    "family": "file-reader",
+    "sourceText": "strings /etc/hosts",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-021",
+    "domain": "shell",
+    "family": "file-reader",
+    "sourceText": "hexdump /etc/hosts",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-022",
+    "domain": "shell",
+    "family": "file-reader",
+    "sourceText": "nl /etc/hosts",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-023",
+    "domain": "shell",
+    "family": "wrapper",
+    "sourceText": "nohup uname -a",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-024",
+    "domain": "shell",
+    "family": "wrapper",
+    "sourceText": "time uname -a",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-025",
+    "domain": "shell",
+    "family": "wrapper",
+    "sourceText": "bash -lc 'uname -a'",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-026",
+    "domain": "shell",
+    "family": "pkg-query",
+    "sourceText": "apt list --installed",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-027",
+    "domain": "redis",
+    "family": "redis-read",
+    "sourceText": "SORT_RO mylist",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-028",
+    "domain": "redis",
+    "family": "redis-read",
+    "sourceText": "HELLO 3",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-029",
+    "domain": "redis",
+    "family": "redis-read",
+    "sourceText": "LOLWUT",
+    "expectedAction": "allow",
+    "class": "false_review_fix"
+  },
+  {
+    "id": "acc-030",
+    "domain": "shell",
+    "family": "basic-read",
+    "sourceText": "ls -la /var/log",
+    "expectedAction": "allow",
+    "class": "regression"
+  },
+  {
+    "id": "acc-031",
+    "domain": "shell",
+    "family": "file-reader",
+    "sourceText": "cat /etc/hosts",
+    "expectedAction": "allow",
+    "class": "regression"
+  },
+  {
+    "id": "acc-032",
+    "domain": "shell",
+    "family": "sensitive-path",
+    "sourceText": "cat /etc/shadow",
+    "expectedAction": "review",
+    "class": "regression"
+  },
+  {
+    "id": "acc-033",
+    "domain": "shell",
+    "family": "mutation",
+    "sourceText": "rm -rf /tmp/generated",
+    "expectedAction": "review",
+    "class": "regression"
+  },
+  {
+    "id": "acc-034",
+    "domain": "shell",
+    "family": "service-query",
+    "sourceText": "systemctl status app",
+    "expectedAction": "allow",
+    "class": "regression"
+  },
+  {
+    "id": "acc-035",
+    "domain": "shell",
+    "family": "service-control",
+    "sourceText": "systemctl restart app",
+    "expectedAction": "review",
+    "class": "regression"
+  },
+  {
+    "id": "acc-036",
+    "domain": "shell",
+    "family": "network-read",
+    "sourceText": "curl -I https://example.invalid/health",
+    "expectedAction": "allow",
+    "class": "regression"
+  },
+  {
+    "id": "acc-037",
+    "domain": "shell",
+    "family": "network-write",
+    "sourceText": "curl -d x https://example.invalid/",
+    "expectedAction": "review",
+    "class": "regression"
+  },
+  {
+    "id": "acc-038",
+    "domain": "sqlite",
+    "family": "sql-read",
+    "sourceText": "SELECT id, name FROM users",
+    "expectedAction": "allow",
+    "class": "regression"
+  },
+  {
+    "id": "acc-039",
+    "domain": "sqlite",
+    "family": "sensitive-column",
+    "sourceText": "SELECT password_hash FROM users",
+    "expectedAction": "review",
+    "class": "regression"
+  },
+  {
+    "id": "acc-040",
+    "domain": "redis",
+    "family": "redis-read",
+    "sourceText": "GET cache:item",
+    "expectedAction": "allow",
+    "class": "regression"
+  },
+  {
+    "id": "acc-041",
+    "domain": "redis",
+    "family": "redis-blocking",
+    "sourceText": "BLPOP queue 0",
+    "expectedAction": "deny",
+    "class": "regression"
+  },
+  {
+    "id": "acc-042",
+    "domain": "python",
+    "family": "python-basic",
+    "sourceText": "print(1 + 2)",
+    "expectedAction": "allow",
+    "class": "regression"
+  },
+  {
+    "id": "acc-043",
+    "domain": "python",
+    "family": "python-dynamic",
+    "sourceText": "eval(\"1+1\")",
+    "expectedAction": "review",
+    "class": "regression"
+  }
+]

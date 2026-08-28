@@ -98,6 +98,29 @@ export function isSensitiveSqlName(name: string): boolean {
   return name !== '*' && isSensitiveIdentifier(name);
 }
 
+const restrictedSchemas = new Set([
+  'mysql',
+  'performance_schema',
+  'information_schema',
+  'sys',
+  'pg_catalog',
+]);
+
+export function isRestrictedSchema(name: string): boolean {
+  return restrictedSchemas.has(name.toLowerCase());
+}
+
+const knownSecretColumns = new Set([
+  'authentication_string',
+  'password_hash',
+  'ssl_cipher',
+  'password',
+]);
+
+export function isKnownSecretColumn(name: string): boolean {
+  return isSensitiveSqlName(name) || knownSecretColumns.has(name.toLowerCase());
+}
+
 export function isKnownSecretTable(name: string): boolean {
   return (
     isSensitiveSqlName(name) ||
@@ -105,6 +128,16 @@ export function isKnownSecretTable(name: string): boolean {
       name,
     )
   );
+}
+
+export function isSensitiveTableRef(
+  schema: string | undefined,
+  table: string,
+): boolean {
+  if (schema !== undefined && isRestrictedSchema(schema)) {
+    return true;
+  }
+  return isKnownSecretTable(table);
 }
 
 export function walkRecords(

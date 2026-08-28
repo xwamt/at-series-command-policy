@@ -4,6 +4,7 @@ import {
   isSensitiveHeader,
   isSensitivePath,
 } from '../analysis/sensitivity.js';
+import { commandContracts, type CommandContract } from './command-table.js';
 import type { ShellCommandIr } from './ir.js';
 
 const trustedBinaryPrefixes = [
@@ -16,104 +17,6 @@ const trustedBinaryPrefixes = [
   '/opt/homebrew/bin/',
   '/opt/homebrew/sbin/',
 ];
-
-const processLocalCommands = new Set([
-  ':',
-  '[',
-  'echo',
-  'false',
-  'groups',
-  'id',
-  'nproc',
-  'printf',
-  'pwd',
-  'test',
-  'true',
-  'uname',
-  'uptime',
-  'users',
-  'who',
-  'whoami',
-]);
-
-const hostObserverCommands = new Set([
-  'blkid',
-  'df',
-  'dig',
-  'free',
-  'getconf',
-  'getenforce',
-  'host',
-  'iostat',
-  'ipcs',
-  'last',
-  'lastb',
-  'lscpu',
-  'lsblk',
-  'lsof',
-  'mpstat',
-  'netstat',
-  'logread',
-  'nslookup',
-  'pgrep',
-  'pidof',
-  'ps',
-  'top',
-  'vmstat',
-  'w',
-  'which',
-  'whereis',
-]);
-
-const fileReaderCommands = new Set([
-  'cat',
-  'cksum',
-  'du',
-  'file',
-  'md5sum',
-  'readlink',
-  'realpath',
-  'sha1sum',
-  'sha256sum',
-  'sha512sum',
-  'stat',
-]);
-
-const alwaysWriteCommands = new Set([
-  'apt',
-  'apt-get',
-  'chattr',
-  'chgrp',
-  'chmod',
-  'chown',
-  'cp',
-  'dd',
-  'install',
-  'kill',
-  'killall',
-  'ln',
-  'mkdir',
-  'mkfifo',
-  'mknod',
-  'mv',
-  'npm',
-  'pkill',
-  'reboot',
-  'rename',
-  'rm',
-  'rmdir',
-  'rsync',
-  'shutdown',
-  'sudoedit',
-  'tee',
-  'touch',
-  'truncate',
-  'unlink',
-  'useradd',
-  'userdel',
-  'usermod',
-  'yum',
-]);
 
 function effect(
   effectCode: string,
@@ -218,6 +121,44 @@ function nonOptionArguments(
   return operands;
 }
 
+function applyContract(
+  contract: CommandContract,
+  args: readonly (string | undefined)[],
+): AnalyzedEffect {
+  if (contract.defaultEffect === 'write') {
+    return writesState();
+  }
+  if (contract.defaultEffect === 'processLocal') {
+    return processLocal();
+  }
+  if (contract.defaultEffect === 'unknown') {
+    return unknown();
+  }
+  if (!contract.operandsAreFiles) {
+    return ordinaryRead();
+  }
+  const operands = nonOptionArguments(args);
+  if (contract.skipFirstOperand) {
+    return operands.length <= 1
+      ? ordinaryRead()
+      : classifyPaths(operands.slice(1));
+  }
+  return classifyPaths(operands);
+}
+
+function versionOrHelpOnly(args: readonly (string | undefined)[]): boolean {
+  return (
+    args.length > 0 &&
+    args.every(
+      (argument) =>
+        argument === '--version' ||
+        argument === '-V' ||
+        argument === '--help' ||
+        argument === '-h',
+    )
+  );
+}
+
 function analyzeGrep(args: readonly (string | undefined)[]): AnalyzedEffect {
   const operands = nonOptionArguments(args);
   if (operands.length <= 1) {
@@ -235,10 +176,6 @@ function analyzeHeadOrTail(
   return classifyPaths(operands);
 }
 
-function analyzeLs(args: readonly (string | undefined)[]): AnalyzedEffect {
-  return classifyPaths(nonOptionArguments(args));
-}
-
 function analyzeSort(args: readonly (string | undefined)[]): AnalyzedEffect {
   if (
     args.some(
@@ -253,31 +190,240 @@ function analyzeSort(args: readonly (string | undefined)[]): AnalyzedEffect {
   return classifyPaths(nonOptionArguments(args));
 }
 
+function sedScriptMayWriteOrExecute(script: string): boolean {
+  let index = 0;
+  const skipDelimited = (delimiter: string): boolean => {
+    while (index < script.length) {
+      const character = script[index]!;
+      if (character === '\\') {
+        index += 2;
+        continue;
+      }
+      index += 1;
+      if (character === delimiter) {
+        return true;
+      }
+      if (character === '\n') {
+        return false;
+      }
+    }
+    return false;
+  };
+  const skipToLineEnd = () => {
+    while (index < script.length && script[index] !== '\n') {
+      index += 1;
+    }
+  };
+
+  while (index < script.length) {
+    const character = script[index]!;
+    if (/[\s;,!$~+]/.test(character)) {
+      index += 1;
+      continue;
+    }
+    if (/\d/.test(character)) {
+      index += 1;
+      continue;
+    }
+    if (character === '/') {
+      index += 1;
+      if (!skipDelimited('/')) {
+        return true;
+      }
+      while (index < script.length && /[IM]/.test(script[index]!)) {
+        index += 1;
+      }
+      continue;
+    }
+    if (character === '\\') {
+      const delimiter = script[index + 1];
+      if (delimiter === undefined) {
+        return true;
+      }
+      index += 2;
+      if (!skipDelimited(delimiter)) {
+        return true;
+      }
+      continue;
+    }
+    if (character === '{' || character === '}') {
+      index += 1;
+      continue;
+    }
+    if (character === '#') {
+      skipToLineEnd();
+      continue;
+    }
+    if (character === 'w' || character === 'W' || character === 'e') {
+      return true;
+    }
+    if (character === 's' || character === 'y') {
+      const delimiter = script[index + 1];
+      if (delimiter === undefined || delimiter === '\n') {
+        return true;
+      }
+      index += 2;
+      if (!skipDelimited(delimiter) || !skipDelimited(delimiter)) {
+        return true;
+      }
+      if (character === 's') {
+        while (index < script.length && !/[;\n]/.test(script[index]!)) {
+          const flag = script[index]!;
+          if (flag === 'w' || flag === 'e') {
+            return true;
+          }
+          if (!/[\dgimpIM\s]/.test(flag)) {
+            return true;
+          }
+          index += 1;
+        }
+      }
+      continue;
+    }
+    if (character === 'a' || character === 'i' || character === 'c') {
+      index += 1;
+      while (index < script.length) {
+        if (script[index] === '\\') {
+          index += 2;
+          continue;
+        }
+        if (script[index] === '\n') {
+          break;
+        }
+        index += 1;
+      }
+      continue;
+    }
+    if (/[btT:]/.test(character)) {
+      index += 1;
+      while (index < script.length && !/[;\n]/.test(script[index]!)) {
+        index += 1;
+      }
+      continue;
+    }
+    if (character === 'r' || character === 'R') {
+      index += 1;
+      skipToLineEnd();
+      continue;
+    }
+    if (/[pPdDgGhHxnNlq=zF]/.test(character) || character === 'Q') {
+      index += 1;
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+const safeSedShortFlags = new Set(['n', 'r', 'E', 's', 'z', 'u']);
+
 function analyzeSed(args: readonly (string | undefined)[]): AnalyzedEffect {
+  const scripts: (string | undefined)[] = [];
+  const operands: (string | undefined)[] = [];
+  let expressionSeen = false;
+  let optionsEnded = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === undefined) {
+      return unknown();
+    }
+    if (optionsEnded || !argument.startsWith('-') || argument === '-') {
+      operands.push(argument);
+      continue;
+    }
+    if (argument === '--') {
+      optionsEnded = true;
+      continue;
+    }
+    if (argument.startsWith('--')) {
+      if (argument === '--in-place' || argument.startsWith('--in-place=')) {
+        return writesState();
+      }
+      if (argument === '--file' || argument.startsWith('--file=')) {
+        return unknown();
+      }
+      if (argument === '--expression') {
+        expressionSeen = true;
+        scripts.push(args[index + 1]);
+        index += 1;
+        continue;
+      }
+      if (argument.startsWith('--expression=')) {
+        expressionSeen = true;
+        scripts.push(argument.slice('--expression='.length));
+        continue;
+      }
+      continue;
+    }
+    for (let position = 1; position < argument.length; position += 1) {
+      const flag = argument[position]!;
+      if (flag === 'i') {
+        return writesState();
+      }
+      if (flag === 'f') {
+        return unknown();
+      }
+      if (flag === 'e') {
+        expressionSeen = true;
+        const attached = argument.slice(position + 1);
+        if (attached.length > 0) {
+          scripts.push(attached);
+        } else {
+          scripts.push(args[index + 1]);
+          index += 1;
+        }
+        break;
+      }
+      if (!safeSedShortFlags.has(flag)) {
+        return unknown();
+      }
+    }
+  }
+  const scriptTexts = expressionSeen ? scripts : operands.slice(0, 1);
+  const fileOperands = expressionSeen ? operands : operands.slice(1);
+  if (scriptTexts.some((script) => script === undefined)) {
+    return unknown();
+  }
   if (
-    args.some(
-      (argument) =>
-        argument === '-i' ||
-        argument === '--in-place' ||
-        argument?.startsWith('--in-place='),
+    scriptTexts.some(
+      (script) => script !== undefined && sedScriptMayWriteOrExecute(script),
     )
   ) {
     return writesState();
   }
-  const operands = nonOptionArguments(args);
-  return operands.length <= 1 ? ordinaryRead() : classifyPaths(operands.slice(1));
+  return classifyPaths(fileOperands);
 }
 
 function analyzeAwk(args: readonly (string | undefined)[]): AnalyzedEffect {
-  const program = nonOptionArguments(args)[0];
   if (
-    program === undefined ||
-    /\bsystem\s*\(|(?:^|[;{])\s*(?:print|printf)\b[^}\n]*[>|]/.test(program)
+    args.some(
+      (argument) =>
+        argument !== undefined &&
+        (/^-f/.test(argument) ||
+          /^--(?:exec|file|include|load|source)(?:=|$)/.test(argument) ||
+          argument === '-E' ||
+          argument === '-i' ||
+          argument === '-l'),
+    )
   ) {
     return unknown();
   }
-  const operands = nonOptionArguments(args);
-  return operands.length <= 1 ? ordinaryRead() : classifyPaths(operands.slice(1));
+  const operands = operandsWithOptionValues(
+    args,
+    new Set(['-F', '-v', '-W', '--assign', '--field-separator']),
+  );
+  const program = operands[0];
+  if (
+    program === undefined ||
+    /\bsystem\s*\(|\|\s*getline\b|\|&|(?:^|[;{])\s*(?:print|printf)\b[^}\n]*[>|]/.test(
+      program,
+    )
+  ) {
+    return unknown();
+  }
+  return operands.length <= 1
+    ? ordinaryRead()
+    : classifyPaths(operands.slice(1));
 }
 
 function analyzeSystemctl(
@@ -812,6 +958,9 @@ function wrappedCommand(
     for (const option of ['-e', '-i', '-o']) {
       skipValue.add(option);
     }
+  } else if (wrapper === 'watch') {
+    skipValue.add('-n');
+    skipValue.add('--interval');
   }
 
   if (wrapper === 'env') {
@@ -854,6 +1003,16 @@ function wrappedCommand(
       if (argument === '--') {
         index += 1;
         break;
+      }
+      if (
+        wrapper === 'time' &&
+        (argument === '-o' ||
+          argument === '-a' ||
+          argument === '--output' ||
+          argument.startsWith('--output=') ||
+          argument === '--append')
+      ) {
+        return undefined;
       }
       if (wrapper === 'timeout' && !argument.startsWith('-')) {
         index += 1;
@@ -925,22 +1084,15 @@ export async function analyzeShellCommand(
     );
   };
 
-  if (alwaysWriteCommands.has(name) || /^mkfs(?:\.|$)/.test(name)) {
+  if (/^mkfs(?:\.|$)/.test(name)) {
     return [writesState()];
   }
-  if (processLocalCommands.has(name)) {
-    return [processLocal()];
-  }
-  if (hostObserverCommands.has(name)) {
-    return [ordinaryRead()];
-  }
-  if (fileReaderCommands.has(name)) {
-    return [classifyPaths(nonOptionArguments(args))];
+  const contract = commandContracts.get(name);
+  if (contract) {
+    return [applyContract(contract, args)];
   }
 
   switch (name) {
-    case 'ls':
-      return [analyzeLs(args)];
     case 'grep':
     case 'egrep':
     case 'fgrep':
@@ -958,12 +1110,6 @@ export async function analyzeShellCommand(
     case 'mawk':
     case 'nawk':
       return [analyzeAwk(args)];
-    case 'cut':
-    case 'jq':
-    case 'tr':
-    case 'uniq':
-    case 'wc':
-      return [ordinaryRead()];
     case 'find':
       return [analyzeFind(args)];
     case 'systemctl':
@@ -1097,16 +1243,39 @@ export async function analyzeShellCommand(
       return unwrap(wrappedCommand(args, name));
     }
     case 'builtin':
-    case 'env':
     case 'ionice':
     case 'nice':
+    case 'nohup':
+    case 'setsid':
     case 'stdbuf':
     case 'sudo':
+    case 'time':
     case 'timeout':
+    case 'watch':
       return unwrap(wrappedCommand(args, name));
+    case 'env': {
+      const child = wrappedCommand(args, name);
+      if (child) {
+        return unwrap(child);
+      }
+      return [
+        args.every(
+          (argument) =>
+            argument !== undefined &&
+            !/^(?:BASH_ENV|ENV|LD_|PATH=|PYTHONPATH=|SHELLOPTS=)/.test(
+              argument,
+            ),
+        )
+          ? processLocal()
+          : unknown(),
+      ];
+    }
     case 'bash':
     case 'sh': {
-      const codeIndex = args.findIndex((argument) => argument === '-c');
+      const codeIndex = args.findIndex(
+        (argument) =>
+          argument !== undefined && /^-[A-Za-z]*c[A-Za-z]*$/.test(argument),
+      );
       const payload = codeIndex >= 0 ? args[codeIndex + 1] : undefined;
       return payload && hooks
         ? hooks.analyzeNestedShell(payload, wrapperDepth + 1)
@@ -1149,7 +1318,47 @@ export async function analyzeShellCommand(
           ? writesState()
           : ordinaryRead(),
       ];
+    case 'apt':
+      return [
+        onlyReadSubcommands(
+          args,
+          new Set([
+            'changelog',
+            'depends',
+            'list',
+            'policy',
+            'search',
+            'show',
+          ]),
+        ),
+      ];
+    case 'apt-get':
+      return [
+        args.some(
+          (argument) =>
+            argument === '-s' ||
+            argument === '--simulate' ||
+            argument === '--dry-run',
+        )
+          ? ordinaryRead()
+          : writesState(),
+      ];
+    case 'yum':
+      return [onlyReadSubcommands(args, new Set(['info', 'list', 'search']))];
+    case 'npm':
+      return [
+        onlyReadSubcommands(
+          args,
+          new Set(['list', 'ls', 'outdated', 'ping', 'show', 'view']),
+        ),
+      ];
+    case 'openssl':
+      return [
+        nonOptionArguments(args)[0] === 'version' || versionOrHelpOnly(args)
+          ? processLocal()
+          : unknown(),
+      ];
     default:
-      return [unknown()];
+      return [versionOrHelpOnly(args) ? processLocal() : unknown()];
   }
 }

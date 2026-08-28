@@ -86,6 +86,31 @@ test('MySQL reviews writes, controls, locks, sensitive reads, and unknown functi
   }
 });
 
+test('MySQL reviews reads against restricted system schemas and secret columns', async () => {
+  const sources = [
+    'SELECT * FROM mysql.user',
+    'SELECT Host, User, authentication_string FROM mysql.user',
+    'SELECT * FROM users UNION SELECT * FROM mysql.user',
+    'SELECT grantee FROM information_schema.user_privileges',
+    'SELECT * FROM performance_schema.threads',
+  ];
+  for (const source of sources) {
+    assert.equal(await mysqlAction(source), 'review', source);
+  }
+});
+
+test('MySQL still allows ordinary reads and metadata with schema checks in place', async () => {
+  const sources = ['SELECT id, name FROM users', 'SHOW STATUS', 'DESCRIBE users'];
+  for (const source of sources) {
+    assert.equal(await mysqlAction(source), 'allow', source);
+  }
+});
+
+test('SQLite table sensitivity behavior is unchanged by schema qualification', async () => {
+  assert.equal(await sqliteAction('SELECT id, name FROM users'), 'allow');
+  assert.equal(await sqliteAction('SELECT * FROM credentials'), 'review');
+});
+
 test('SQL parse failures and statement limits fail closed', async () => {
   for (const evaluator of [sqlite, mysql]) {
     const malformed = await evaluator.evaluate({ sourceText: 'SELECT FROM' });

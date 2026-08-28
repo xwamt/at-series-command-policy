@@ -12,9 +12,10 @@ import {
 } from '../analysis/limits.js';
 import { createFailClosedDecision } from '../fail-closed.js';
 import {
-  isKnownSecretTable,
+  isKnownSecretColumn,
   isRecord,
   isSensitiveSqlName,
+  isSensitiveTableRef,
   pureSqlFunctions,
   readEffect,
   reviewEffect,
@@ -36,6 +37,17 @@ const MysqlParser = (
 
 export interface InternalMysqlEvaluatorOptions {
   readonly limits?: Partial<PolicyAnalysisLimits>;
+}
+
+// Identifier fields in node-sql-parser ASTs are usually plain strings but can
+// appear as `{ value }` wrappers in some productions.
+function mysqlIdentifierValue(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+  return isRecord(value) && typeof value.value === 'string'
+    ? value.value
+    : undefined;
 }
 
 function mysqlFunctionName(node: UnknownRecord): string | undefined {
@@ -73,7 +85,7 @@ function analyzeSelect(
     if (
       node.type === 'column_ref' &&
       typeof node.column === 'string' &&
-      isSensitiveSqlName(node.column)
+      isKnownSecretColumn(node.column)
     ) {
       return reviewEffect('mysql', 'sensitive_read');
     }
@@ -82,11 +94,17 @@ function analyzeSelect(
     }
   }
 
-  const tables = records
-    .map((node) => node.table)
-    .filter((table): table is string => typeof table === 'string');
-  if (tables.some((table) => isKnownSecretTable(table) || isSensitiveSqlName(table))) {
-    return reviewEffect('mysql', 'sensitive_read');
+  for (const node of records) {
+    const table = mysqlIdentifierValue(node.table);
+    if (table === undefined) {
+      continue;
+    }
+    // Table references in FROM clauses carry the qualifying schema in `db`
+    // (e.g. `SELECT * FROM mysql.user` yields { db: 'mysql', table: 'user' }).
+    const schema = mysqlIdentifierValue(node.db);
+    if (isSensitiveTableRef(schema, table) || isSensitiveSqlName(table)) {
+      return reviewEffect('mysql', 'sensitive_read');
+    }
   }
 
   for (const node of records) {

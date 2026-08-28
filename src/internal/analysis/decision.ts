@@ -10,6 +10,7 @@ import type {
 import {
   POLICY_DECISION_SCHEMA_VERSION,
   POLICY_PACKAGE_VERSION,
+  POLICY_RULE_VERSIONS,
 } from '../../core/version.js';
 import type { PolicyDomain } from '../failure-types.js';
 
@@ -26,6 +27,11 @@ export interface AnalyzedEffect {
   readonly kind: PolicyEvidenceKind;
   /** Must be controlled static text, never source-derived text. */
   readonly summary: string;
+  /**
+   * Optional narrowed range over the exact input sourceText. When omitted the
+   * evidence falls back to the whole-source location.
+   */
+  readonly location?: SourceLocation;
 }
 
 function wholeSourceLocation(sourceText: string): SourceLocation {
@@ -75,11 +81,11 @@ export function createAnalyzedDecision(
     }
   }
 
-  const location = wholeSourceLocation(sourceText);
+  const fallbackLocation = wholeSourceLocation(sourceText);
   const evidence: PolicyEvidence[] = effectsToUse.map((effect) =>
     Object.freeze({
       kind: effect.kind,
-      location,
+      location: effect.location ?? fallbackLocation,
       redacted: true as const,
       summary: effect.summary,
     }),
@@ -101,8 +107,8 @@ export function createAnalyzedDecision(
     versions: Object.freeze({
       policy: POLICY_PACKAGE_VERSION,
       rules: Object.freeze({
-        core: POLICY_PACKAGE_VERSION,
-        [domain]: POLICY_PACKAGE_VERSION,
+        core: POLICY_RULE_VERSIONS.core,
+        [domain]: POLICY_RULE_VERSIONS[domain],
       }),
       parsers: Object.freeze({
         [domain]: parserVersion,

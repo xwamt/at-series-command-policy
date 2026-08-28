@@ -1,4 +1,7 @@
-import type { PolicyAnalysisLimits } from '../../index.js';
+import type {
+  PolicyAnalysisLimits,
+  SourceLocation,
+} from '../../index.js';
 import { WorkBudget } from '../analysis/limits.js';
 import type {
   SyntaxNode,
@@ -8,12 +11,16 @@ import type {
 export interface ShellCommandIr {
   readonly name: string | undefined;
   readonly arguments: readonly (string | undefined)[];
+  /** Range of the command node over the parsed source text, when known. */
+  readonly location?: SourceLocation;
 }
 
 export interface ShellRedirectIr {
   readonly direction: 'input' | 'output' | 'read-write' | 'unknown';
   readonly target: string | undefined;
   readonly harmless: boolean;
+  /** Range of the redirect node over the parsed source text, when known. */
+  readonly location?: SourceLocation;
 }
 
 export interface ShellIr {
@@ -107,12 +114,33 @@ function staticNodeValue(node: SyntaxNode | null): string | undefined {
   return decodeStaticShellText(node.text);
 }
 
+/**
+ * Maps tree-sitter node coordinates onto the decision SourceLocation shape:
+ * startIndex/endIndex are UTF-16 code-unit offsets over the parsed string and
+ * position rows/columns are zero-based, while SourceLocation is one-based.
+ */
+function nodeLocation(node: SyntaxNode): SourceLocation {
+  return {
+    start: {
+      offset: node.startIndex,
+      line: node.startPosition.row + 1,
+      column: node.startPosition.column + 1,
+    },
+    end: {
+      offset: node.endIndex,
+      line: node.endPosition.row + 1,
+      column: node.endPosition.column + 1,
+    },
+  };
+}
+
 function commandFromNode(node: SyntaxNode): ShellCommandIr {
   return {
     name: staticNodeValue(node.childForFieldName('name')),
     arguments: node
       .childrenForFieldName('argument')
       .map((argument) => staticNodeValue(argument)),
+    location: nodeLocation(node),
   };
 }
 
@@ -134,7 +162,7 @@ function redirectFromNode(node: SyntaxNode): ShellRedirectIr {
     direction = 'input';
   }
 
-  return { direction, target, harmless };
+  return { direction, target, harmless, location: nodeLocation(node) };
 }
 
 export function parseShellIr(
