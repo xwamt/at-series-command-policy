@@ -22,6 +22,7 @@ const sharedOptions = {
   bundle: true,
   platform: 'node',
   target: 'node18',
+  minify: true,
   legalComments: 'eof',
   logLevel: 'info',
   external: ['./mysql.js', './python.js', './redis.js', './sqlite.js'],
