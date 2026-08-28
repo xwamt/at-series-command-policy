@@ -221,16 +221,23 @@ async function analyzeMysql(
     : unknownEmbedded('mysql');
 }
 
+const respEncoder = new TextEncoder();
+
 function toResp(arguments_: readonly string[]): string {
-  const encoder = new TextEncoder();
   return [
     `*${arguments_.length}\r\n`,
     ...arguments_.flatMap((argument) => [
-      `$${encoder.encode(argument).byteLength}\r\n`,
+      `$${respEncoder.encode(argument).byteLength}\r\n`,
       `${argument}\r\n`,
     ]),
   ].join('');
 }
+
+const redisOutputModeOptions = new Set([
+  '--no-raw',
+  '--raw',
+  '--quoted-input',
+]);
 
 async function analyzeRedis(
   command: ShellCommandIr,
@@ -266,10 +273,7 @@ async function analyzeRedis(
       index += 1;
       continue;
     }
-    if (
-      !commandStarted &&
-      new Set(['--no-raw', '--raw', '--quoted-input']).has(argument)
-    ) {
+    if (!commandStarted && redisOutputModeOptions.has(argument)) {
       continue;
     }
     commandStarted = true;
@@ -295,28 +299,41 @@ function versionOrHelpOnly(
   );
 }
 
+export type EmbeddedDomain = 'python' | 'sqlite' | 'mysql' | 'redis';
+
+const pythonExecutablePattern = /^python3?(?:\.\d+)*$/;
+
+export function embeddedDomainForExecutable(
+  name: string | undefined,
+): EmbeddedDomain | undefined {
+  if (!name) return undefined;
+  if (pythonExecutablePattern.test(name)) return 'python';
+  if (name === 'sqlite3') return 'sqlite';
+  if (name === 'mysql') return 'mysql';
+  if (name === 'redis-cli') return 'redis';
+  return undefined;
+}
+
 export async function analyzeEmbeddedCommand(
   command: ShellCommandIr,
   loaders: EmbeddedEvaluatorLoaders,
+  normalizedName = normalizeExecutable(command.name),
 ): Promise<readonly AnalyzedEffect[] | undefined> {
-  const name = normalizeExecutable(command.name);
-  if (!name) {
-    return undefined;
-  }
-  if (/^python3?(?:\.\d+)*$/.test(name)) {
+  const domain = embeddedDomainForExecutable(normalizedName);
+  if (domain === 'python') {
     // Let `--version`/`--help` fall through to shell contracts.
     if (versionOrHelpOnly(command.arguments)) {
       return undefined;
     }
     return analyzePython(command, loaders);
   }
-  if (name === 'sqlite3') {
+  if (domain === 'sqlite') {
     return analyzeSqlite(command, loaders);
   }
-  if (name === 'mysql') {
+  if (domain === 'mysql') {
     return analyzeMysql(command, loaders);
   }
-  if (name === 'redis-cli') {
+  if (domain === 'redis') {
     return analyzeRedis(command, loaders);
   }
   return undefined;

@@ -19,9 +19,10 @@ import {
   createTreeSitterParser,
   type TreeSitterParserHandle,
 } from '../tree-sitter/runtime.js';
-import { analyzeShellCommand } from './contracts.js';
+import { analyzeShellCommand, normalizeExecutable } from './contracts.js';
 import {
   analyzeEmbeddedCommand,
+  embeddedDomainForExecutable,
   type EmbeddedEvaluatorLoaders,
 } from './embedded.js';
 import {
@@ -213,17 +214,29 @@ export function createDeterministicShellEvaluator(
         };
 
         for (const command of ir.commands) {
-          const embedded = await analyzeEmbeddedCommand(
-            command,
-            options.embeddedEvaluators,
-          );
+          const name = normalizeExecutable(command.name);
+          const embedded = embeddedDomainForExecutable(name)
+            ? await analyzeEmbeddedCommand(
+                command,
+                options.embeddedEvaluators,
+                name,
+              )
+            : undefined;
           const commandEffects =
             embedded ??
-            (await analyzeShellCommand(command, {
-              analyzeNestedShell,
-              analyzeEmbedded: (nestedCommand) =>
-                analyzeEmbeddedCommand(nestedCommand, options.embeddedEvaluators),
-            }));
+            (await analyzeShellCommand(
+              command,
+              {
+                analyzeNestedShell,
+                analyzeEmbedded: (nestedCommand) =>
+                  analyzeEmbeddedCommand(
+                    nestedCommand,
+                    options.embeddedEvaluators,
+                  ),
+              },
+              0,
+              name,
+            ));
           effects.push(...withLocation(commandEffects, command.location));
         }
         for (const redirect of ir.redirects) {

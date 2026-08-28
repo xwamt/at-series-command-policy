@@ -426,28 +426,29 @@ function analyzeAwk(args: readonly (string | undefined)[]): AnalyzedEffect {
     : classifyPaths(operands.slice(1));
 }
 
+const systemctlReadSubcommands = new Set([
+  'cat',
+  'get-default',
+  'help',
+  'is-active',
+  'is-enabled',
+  'is-failed',
+  'is-system-running',
+  'list-dependencies',
+  'list-jobs',
+  'list-machines',
+  'list-sockets',
+  'list-timers',
+  'list-unit-files',
+  'list-units',
+  'show',
+  'show-environment',
+  'status',
+]);
+
 function analyzeSystemctl(
   args: readonly (string | undefined)[],
 ): AnalyzedEffect {
-  const readSubcommands = new Set([
-    'cat',
-    'get-default',
-    'help',
-    'is-active',
-    'is-enabled',
-    'is-failed',
-    'is-system-running',
-    'list-dependencies',
-    'list-jobs',
-    'list-machines',
-    'list-sockets',
-    'list-timers',
-    'list-unit-files',
-    'list-units',
-    'show',
-    'show-environment',
-    'status',
-  ]);
   const subcommand = args.find(
     (argument) => argument !== undefined && !argument.startsWith('-'),
   );
@@ -461,10 +462,19 @@ function analyzeSystemctl(
   ) {
     return ordinaryRead();
   }
-  return subcommand && readSubcommands.has(subcommand)
+  return subcommand && systemctlReadSubcommands.has(subcommand)
     ? ordinaryRead()
     : writesState();
 }
+
+const ipReadSubcommands = new Set([
+  'get',
+  'help',
+  'list',
+  'lst',
+  'save',
+  'show',
+]);
 
 function analyzeIp(args: readonly (string | undefined)[]): AnalyzedEffect {
   if (args.some((argument) => argument === undefined)) {
@@ -477,11 +487,7 @@ function analyzeIp(args: readonly (string | undefined)[]): AnalyzedEffect {
   if (operands.length < 2) {
     return ordinaryRead();
   }
-  return new Set(['get', 'help', 'list', 'lst', 'save', 'show']).has(
-    operands[1]!,
-  )
-    ? ordinaryRead()
-    : writesState();
+  return ipReadSubcommands.has(operands[1]!) ? ordinaryRead() : writesState();
 }
 
 function analyzeTc(args: readonly (string | undefined)[]): AnalyzedEffect {
@@ -497,22 +503,20 @@ function analyzeTc(args: readonly (string | undefined)[]): AnalyzedEffect {
     : writesState();
 }
 
+const findMutatingExpressions = new Set([
+  '-delete',
+  '-exec',
+  '-execdir',
+  '-fls',
+  '-fprintf',
+  '-fprint',
+  '-fprint0',
+  '-ok',
+  '-okdir',
+]);
+
 function analyzeFind(args: readonly (string | undefined)[]): AnalyzedEffect {
-  if (
-    args.some((argument) =>
-      new Set([
-        '-delete',
-        '-exec',
-        '-execdir',
-        '-fls',
-        '-fprintf',
-        '-fprint',
-        '-fprint0',
-        '-ok',
-        '-okdir',
-      ]).has(argument ?? ''),
-    )
-  ) {
+  if (args.some((argument) => findMutatingExpressions.has(argument ?? ''))) {
     return writesState();
   }
   if (args.some((argument) => argument === undefined)) {
@@ -606,15 +610,16 @@ function operandsWithOptionValues(
   return operands;
 }
 
+const dateValueOptions = new Set([
+  '-d',
+  '--date',
+  '-r',
+  '--reference',
+  '-f',
+  '--file',
+]);
+
 function analyzeDate(args: readonly (string | undefined)[]): AnalyzedEffect {
-  const valueOptions = new Set([
-    '-d',
-    '--date',
-    '-r',
-    '--reference',
-    '-f',
-    '--file',
-  ]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === undefined) {
@@ -630,7 +635,7 @@ function analyzeDate(args: readonly (string | undefined)[]): AnalyzedEffect {
     if (argument.startsWith('+')) {
       continue;
     }
-    if (valueOptions.has(argument)) {
+    if (dateValueOptions.has(argument)) {
       index += 1;
       continue;
     }
@@ -642,45 +647,47 @@ function analyzeDate(args: readonly (string | undefined)[]): AnalyzedEffect {
   return processLocal();
 }
 
+const gitValueOptions = new Set([
+  '-C',
+  '-c',
+  '--git-dir',
+  '--work-tree',
+  '--namespace',
+  '--exec-path',
+  '--super-prefix',
+]);
+
+const gitReadSubcommands = new Set([
+  'blame',
+  'cat-file',
+  'describe',
+  'diff',
+  'grep',
+  'help',
+  'log',
+  'ls-files',
+  'ls-remote',
+  'ls-tree',
+  'rev-parse',
+  'show',
+  'status',
+  'version',
+]);
+
 function analyzeGit(args: readonly (string | undefined)[]): AnalyzedEffect {
-  const valueOptions = new Set([
-    '-C',
-    '-c',
-    '--git-dir',
-    '--work-tree',
-    '--namespace',
-    '--exec-path',
-    '--super-prefix',
-  ]);
-  const readSubcommands = new Set([
-    'blame',
-    'cat-file',
-    'describe',
-    'diff',
-    'grep',
-    'help',
-    'log',
-    'ls-files',
-    'ls-remote',
-    'ls-tree',
-    'rev-parse',
-    'show',
-    'status',
-    'version',
-  ]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === undefined) {
       return unknown();
     }
-    if (valueOptions.has(argument)) {
+    if (gitValueOptions.has(argument)) {
       index += 1;
       continue;
     }
     if (argument.startsWith('-')) {
       continue;
     }
-    return readSubcommands.has(argument) ? ordinaryRead() : writesState();
+    return gitReadSubcommands.has(argument) ? ordinaryRead() : writesState();
   }
   return writesState();
 }
@@ -705,53 +712,59 @@ function analyzeCrontab(args: readonly (string | undefined)[]): AnalyzedEffect {
   return listing ? ordinaryRead() : writesState();
 }
 
+const dockerValueOptions = new Set([
+  '--config',
+  '--context',
+  '-H',
+  '--host',
+  '-l',
+  '--log-level',
+]);
+
+const dockerReadSubcommands = new Set([
+  'df',
+  'diff',
+  'events',
+  'history',
+  'images',
+  'info',
+  'inspect',
+  'logs',
+  'port',
+  'ps',
+  'search',
+  'stats',
+  'top',
+  'version',
+]);
+
+const dockerNamespaceReads: Readonly<Record<string, ReadonlySet<string>>> = {
+  compose: new Set(['config', 'images', 'logs', 'ps', 'top', 'version']),
+  container: new Set([
+    'diff',
+    'inspect',
+    'logs',
+    'ls',
+    'port',
+    'stats',
+    'top',
+  ]),
+  image: new Set(['history', 'inspect', 'ls']),
+  network: new Set(['inspect', 'ls']),
+  volume: new Set(['inspect', 'ls']),
+};
+
 function analyzeDocker(args: readonly (string | undefined)[]): AnalyzedEffect {
-  const operands = operandsWithOptionValues(
-    args,
-    new Set(['--config', '--context', '-H', '--host', '-l', '--log-level']),
-  );
+  const operands = operandsWithOptionValues(args, dockerValueOptions);
   if (operands.some((operand) => operand === undefined)) {
     return unknown();
   }
   const strings = operands as readonly string[];
   const first = strings[0];
-  if (
-    first &&
-    new Set([
-      'df',
-      'diff',
-      'events',
-      'history',
-      'images',
-      'info',
-      'inspect',
-      'logs',
-      'port',
-      'ps',
-      'search',
-      'stats',
-      'top',
-      'version',
-    ]).has(first)
-  ) {
+  if (first && dockerReadSubcommands.has(first)) {
     return ordinaryRead();
   }
-  const namespaceReads: Readonly<Record<string, ReadonlySet<string>>> = {
-    compose: new Set(['config', 'images', 'logs', 'ps', 'top', 'version']),
-    container: new Set([
-      'diff',
-      'inspect',
-      'logs',
-      'ls',
-      'port',
-      'stats',
-      'top',
-    ]),
-    image: new Set(['history', 'inspect', 'ls']),
-    network: new Set(['inspect', 'ls']),
-    volume: new Set(['inspect', 'ls']),
-  };
-  return first && strings[1] && namespaceReads[first]?.has(strings[1])
+  return first && strings[1] && dockerNamespaceReads[first]?.has(strings[1])
     ? ordinaryRead()
     : writesState();
 }
@@ -770,6 +783,51 @@ function onlyReadSubcommands(
     ? ordinaryRead()
     : writesState();
 }
+
+const curlMutatingOptions = new Set([
+  '--anyauth',
+  '--aws-sigv4',
+  '--basic',
+  '--config',
+  '--cookie',
+  '--cookie-jar',
+  '--data',
+  '--data-ascii',
+  '--data-binary',
+  '--data-raw',
+  '--digest',
+  '--form',
+  '--json',
+  '--negotiate',
+  '--netrc',
+  '--netrc-file',
+  '--oauth2-bearer',
+  '--output',
+  '--proxy-header',
+  '--proxy-user',
+  '--request-target',
+  '--upload-file',
+  '--user',
+  '-F',
+  '-T',
+  '-b',
+  '-c',
+  '-d',
+  '-n',
+  '-o',
+  '-u',
+]);
+
+const safeCurlLongOptions = new Set([
+  '--compressed',
+  '--fail',
+  '--fail-with-body',
+  '--location',
+  '--no-progress-meter',
+  '--silent',
+  '--show-error',
+  '--verbose',
+]);
 
 function analyzeCurl(args: readonly (string | undefined)[]): AnalyzedEffect {
   let method = 'GET';
@@ -842,56 +900,12 @@ function analyzeCurl(args: readonly (string | undefined)[]): AnalyzedEffect {
       continue;
     }
     if (
-      new Set([
-        '--anyauth',
-        '--aws-sigv4',
-        '--basic',
-        '--config',
-        '--cookie',
-        '--cookie-jar',
-        '--data',
-        '--data-ascii',
-        '--data-binary',
-        '--data-raw',
-        '--digest',
-        '--form',
-        '--json',
-        '--negotiate',
-        '--netrc',
-        '--netrc-file',
-        '--oauth2-bearer',
-        '--output',
-        '--proxy-header',
-        '--proxy-user',
-        '--request-target',
-        '--upload-file',
-        '--user',
-        '-F',
-        '-T',
-        '-b',
-        '-c',
-        '-d',
-        '-n',
-        '-o',
-        '-u',
-      ]).has(option) ||
+      curlMutatingOptions.has(option) ||
       /^-[^-]*[FTbcCdDkKnoOu]/.test(option)
     ) {
       return writesState();
     }
-    if (
-      option.startsWith('--') &&
-      !new Set([
-        '--compressed',
-        '--fail',
-        '--fail-with-body',
-        '--location',
-        '--no-progress-meter',
-        '--silent',
-        '--show-error',
-        '--verbose',
-      ]).has(option)
-    ) {
+    if (option.startsWith('--') && !safeCurlLongOptions.has(option)) {
       return unknown();
     }
     if (
@@ -1048,6 +1062,59 @@ function wrappedCommand(
   return { name, arguments: args.slice(index + 1) };
 }
 
+const kubectlReadSubcommands = new Set([
+  'api-resources',
+  'api-versions',
+  'cluster-info',
+  'describe',
+  'explain',
+  'get',
+  'logs',
+  'top',
+  'version',
+]);
+
+const virshReadSubcommands = new Set([
+  'capabilities',
+  'dominfo',
+  'domstate',
+  'domstats',
+  'dumpxml',
+  'list',
+  'nodeinfo',
+  'nodememstats',
+  'version',
+]);
+
+const systemdControlReadSubcommands = new Set([
+  'status',
+  'show',
+  'list-timezones',
+  'list-locales',
+  'list-keymaps',
+  'help',
+]);
+
+const aptReadSubcommands = new Set([
+  'changelog',
+  'depends',
+  'list',
+  'policy',
+  'search',
+  'show',
+]);
+
+const yumReadSubcommands = new Set(['info', 'list', 'search']);
+
+const npmReadSubcommands = new Set([
+  'list',
+  'ls',
+  'outdated',
+  'ping',
+  'show',
+  'view',
+]);
+
 export interface ShellContractHooks {
   readonly analyzeNestedShell: (
     sourceText: string,
@@ -1062,8 +1129,9 @@ export async function analyzeShellCommand(
   command: ShellCommandIr,
   hooks?: ShellContractHooks,
   wrapperDepth = 0,
+  normalizedName = normalizeExecutable(command.name),
 ): Promise<readonly AnalyzedEffect[]> {
-  const name = normalizeExecutable(command.name);
+  const name = normalizedName;
   if (!name) {
     return [unknown()];
   }
@@ -1128,39 +1196,9 @@ export async function analyzeShellCommand(
     case 'podman':
       return [analyzeDocker(args)];
     case 'kubectl':
-      return [
-        onlyReadSubcommands(
-          args,
-          new Set([
-            'api-resources',
-            'api-versions',
-            'cluster-info',
-            'describe',
-            'explain',
-            'get',
-            'logs',
-            'top',
-            'version',
-          ]),
-        ),
-      ];
+      return [onlyReadSubcommands(args, kubectlReadSubcommands)];
     case 'virsh':
-      return [
-        onlyReadSubcommands(
-          args,
-          new Set([
-            'capabilities',
-            'dominfo',
-            'domstate',
-            'domstats',
-            'dumpxml',
-            'list',
-            'nodeinfo',
-            'nodememstats',
-            'version',
-          ]),
-        ),
-      ];
+      return [onlyReadSubcommands(args, virshReadSubcommands)];
     case 'curl':
       return [analyzeCurl(args)];
     case 'ss':
@@ -1198,19 +1236,7 @@ export async function analyzeShellCommand(
     case 'hostnamectl':
     case 'timedatectl':
     case 'localectl':
-      return [
-        onlyReadSubcommands(
-          args,
-          new Set([
-            'status',
-            'show',
-            'list-timezones',
-            'list-locales',
-            'list-keymaps',
-            'help',
-          ]),
-        ),
-      ];
+      return [onlyReadSubcommands(args, systemdControlReadSubcommands)];
     case 'sysctl':
       return [
         args.some((argument) => argument === undefined)
@@ -1319,19 +1345,7 @@ export async function analyzeShellCommand(
           : ordinaryRead(),
       ];
     case 'apt':
-      return [
-        onlyReadSubcommands(
-          args,
-          new Set([
-            'changelog',
-            'depends',
-            'list',
-            'policy',
-            'search',
-            'show',
-          ]),
-        ),
-      ];
+      return [onlyReadSubcommands(args, aptReadSubcommands)];
     case 'apt-get':
       return [
         args.some(
@@ -1344,14 +1358,9 @@ export async function analyzeShellCommand(
           : writesState(),
       ];
     case 'yum':
-      return [onlyReadSubcommands(args, new Set(['info', 'list', 'search']))];
+      return [onlyReadSubcommands(args, yumReadSubcommands)];
     case 'npm':
-      return [
-        onlyReadSubcommands(
-          args,
-          new Set(['list', 'ls', 'outdated', 'ping', 'show', 'view']),
-        ),
-      ];
+      return [onlyReadSubcommands(args, npmReadSubcommands)];
     case 'openssl':
       return [
         nonOptionArguments(args)[0] === 'version' || versionOrHelpOnly(args)
