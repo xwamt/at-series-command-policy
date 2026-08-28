@@ -13,7 +13,7 @@ export const POLICY_RULE_VERSIONS = Object.freeze({
   shell: '0.1.1',
   python: '0.1.0',
   sqlite: '0.1.1',
-  mysql: '0.1.1',
+  mysql: '0.1.2',
   redis: '0.1.1',
 });
 

@@ -24,6 +24,7 @@ import {
 } from './common.js';
 
 const MYSQL_PARSER_VERSION = 'node-sql-parser@5.4.0/mysql';
+const executableCommentPattern = /\/\*!/;
 const MysqlParser = (
   mysqlParserModule as unknown as {
     readonly Parser: new () => {
@@ -162,6 +163,14 @@ export function createDeterministicMysqlEvaluator(
           failure: 'resource-limit-exceeded',
           input,
         });
+      }
+      if (executableCommentPattern.test(sourceText)) {
+        // node-sql-parser drops MySQL executable comments (/*! ... */), so
+        // their payload is invisible to AST analysis. Fail closed instead of
+        // allowing.
+        return createAnalyzedDecision('mysql', input, MYSQL_PARSER_VERSION, [
+          reviewEffect('mysql', 'unknown'),
+        ]);
       }
 
       let ast: unknown;

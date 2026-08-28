@@ -104,7 +104,7 @@ test('combinePolicyDecisions fail-closes malformed runtime decisions', () => {
         policy: '0.1.0',
         rules: {
           core: '0.1.1',
-          mysql: '0.1.1',
+          mysql: '0.1.2',
           python: '0.1.0',
           redis: '0.1.1',
           shell: '0.1.1',
@@ -217,7 +217,7 @@ test('root version metadata is stable and detached from parser internals', () =>
     policy: '0.1.0',
     rules: {
       core: '0.1.1',
-      mysql: '0.1.1',
+      mysql: '0.1.2',
       python: '0.1.0',
       redis: '0.1.1',
       shell: '0.1.1',
