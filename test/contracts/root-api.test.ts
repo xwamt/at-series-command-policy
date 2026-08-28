@@ -11,7 +11,7 @@ function decision(action: 'allow' | 'review' | 'deny') {
     reasonCode: `test.${action}`,
     evidence: [],
     versions: {
-      policy: '0.1.0',
+      policy: '0.1.1',
       rules: {},
       parsers: {},
     },
@@ -101,7 +101,7 @@ test('combinePolicyDecisions fail-closes malformed runtime decisions', () => {
       reasonCode: 'policy.invalid_decision',
       evidence: [],
       versions: {
-        policy: '0.1.0',
+        policy: '0.1.1',
         rules: {
           core: '0.1.1',
           mysql: '0.1.2',
@@ -214,7 +214,7 @@ test('combinePolicyDecisions accepts coherent zero-length and multiline ranges',
 test('root version metadata is stable and detached from parser internals', () => {
   assert.deepEqual(policy.POLICY_VERSION_METADATA, {
     schemaVersion: '1.0.0',
-    policy: '0.1.0',
+    policy: '0.1.1',
     rules: {
       core: '0.1.1',
       mysql: '0.1.2',

@@ -1,7 +1,7 @@
 import type { PolicyPackageVersionMetadata } from '../index.js';
 
 export const POLICY_DECISION_SCHEMA_VERSION = '1.0.0';
-export const POLICY_PACKAGE_VERSION = '0.1.0';
+export const POLICY_PACKAGE_VERSION = '0.1.1';
 
 /**
  * Per-domain rule-table versions. These evolve independently from

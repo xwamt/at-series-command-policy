@@ -37,7 +37,7 @@ test('build fails when runtime policy version differs from package version', asy
     assert.notEqual(build.status, 0);
     assert.match(
       `${build.stdout}\n${build.stderr}`,
-      /package version 9\.9\.9 does not match runtime policy version 0\.1\.0/,
+      /package version 9\.9\.9 does not match runtime policy version \d+\.\d+\.\d+/,
     );
   } finally {
     await rm(temporaryDirectory, {

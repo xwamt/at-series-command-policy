@@ -1,17 +1,17 @@
 # Command policy API
 
-Stable consumer contract for `@at-series/command-policy@0.1.0`.
+Stable consumer contract for `@at-series/command-policy@0.1.1`.
 
 Install from the npm `@at-series` organization. Pin the exact version:
 
 ```sh
-npm install @at-series/command-policy@0.1.0
+npm install @at-series/command-policy@0.1.1
 ```
 
 ```json
 {
   "dependencies": {
-    "@at-series/command-policy": "0.1.0"
+    "@at-series/command-policy": "0.1.1"
   }
 }
 ```

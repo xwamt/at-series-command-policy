@@ -91,7 +91,7 @@ test('packed package works from a clean installation', async () => {
           "import { POLICY_PACKAGE_VERSION } from '@at-series/command-policy';",
           "import { createShellPolicyEvaluator } from '@at-series/command-policy/shell';",
           "const result = await createShellPolicyEvaluator().evaluate({ sourceText: 'echo ok' });",
-          "if (POLICY_PACKAGE_VERSION !== '0.1.0' || result.action !== 'allow') process.exit(1);",
+          "if (POLICY_PACKAGE_VERSION !== '0.1.1' || result.action !== 'allow') process.exit(1);",
           '',
         ].join('\n'),
         'utf8',
@@ -102,7 +102,7 @@ test('packed package works from a clean installation', async () => {
           "const policy = require('@at-series/command-policy');",
           "const shell = require('@at-series/command-policy/shell');",
           "shell.createShellPolicyEvaluator().evaluate({ sourceText: 'echo ok' }).then((result) => {",
-          "  if (policy.POLICY_PACKAGE_VERSION !== '0.1.0' || result.action !== 'allow') process.exit(1);",
+          "  if (policy.POLICY_PACKAGE_VERSION !== '0.1.1' || result.action !== 'allow') process.exit(1);",
           '});',
           '',
         ].join('\n'),
@@ -163,7 +163,7 @@ test('packed package works from a clean installation', async () => {
         'utf8',
       ),
     );
-    assert.equal(installedManifest.version, '0.1.0');
+    assert.equal(installedManifest.version, '0.1.1');
   } finally {
     await rm(temporaryDirectory, {
       recursive: true,

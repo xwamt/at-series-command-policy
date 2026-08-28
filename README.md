@@ -6,7 +6,7 @@ This repository publishes **one** Apache-2.0 npm package. Analyzers decide
 whether a command or payload is `allow`, `review`, or `deny`. They do not map
 trust levels, show confirmation UI, write logs, or execute anything.
 
-当前状态：**0.1.0**。Shell / Python / SQLite / MySQL / Redis 分析器已落地，fail-closed，
+当前状态：**0.1.1**。Shell / Python / SQLite / MySQL / Redis 分析器已落地，fail-closed，
 双模块 CJS/ESM。第一位消费者是 **AT Terminal MCP** 的 limited-trust
 `run_remote_command`。JumpServer 尚未接入。
 
@@ -36,7 +36,7 @@ Node.js **>= 18**. No `vscode` runtime or peer dependency.
 Published on npm under the `@at-series` org:
 
 ```sh
-npm install @at-series/command-policy@0.1.0
+npm install @at-series/command-policy@0.1.1
 ```
 
 Plugins must pin an **exact** version. Do not use `^` or `~` for a security
@@ -45,7 +45,7 @@ boundary.
 ```json
 {
   "dependencies": {
-    "@at-series/command-policy": "0.1.0"
+    "@at-series/command-policy": "0.1.1"
   }
 }
 ```
