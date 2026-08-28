@@ -149,6 +149,20 @@ const evaluator = createShellPolicyEvaluator({
 Allowlist: `web-tree-sitter.wasm`, `tree-sitter-bash.wasm`,
 `tree-sitter-python.wasm`.
 
+`copyPolicyAssets` options:
+
+| Option | Meaning |
+| --- | --- |
+| `destinationDirectory` | Required. Created recursively. |
+| `include` | Optional allowlist of asset ids. Default: the complete `POLICY_ASSET_MANIFEST` (all three files, today's behavior). Unknown ids throw a `TypeError`. |
+
+Omitting an asset trades accuracy for size, never safety: evaluators that
+need it fail closed to `review`. Without `tree-sitter-python`, every
+`python3 -c` payload reviews with reason code
+`shell.embedded_python_review`. `tree-sitter-runtime` and
+`tree-sitter-bash` are hard dependencies of the shell domain — without
+them every shell evaluation reviews with `policy.initialization_failed`.
+
 After a CJS rebundle, define `import.meta.url` as
 `pathToFileURL(__filename).href` (esbuild: inject a `banner` and map it
 with `define`; full recipe in the README's *Bundled consumers* section)

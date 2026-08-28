@@ -9,6 +9,12 @@ export interface PolicyAssetDescriptor {
 
 export interface CopyPolicyAssetsOptions {
   readonly destinationDirectory: string;
+  /**
+   * Optional allowlist of asset ids to copy. Defaults to the complete
+   * POLICY_ASSET_MANIFEST. Omitting an asset trades accuracy for size:
+   * evaluators that need it fail closed to review, never to allow.
+   */
+  readonly include?: readonly string[];
 }
 
 export interface CopiedPolicyAsset {
@@ -64,10 +70,23 @@ async function resolvePackagedAssetPath(
 export async function copyPolicyAssets(
   options: CopyPolicyAssetsOptions,
 ): Promise<readonly CopiedPolicyAsset[]> {
+  const include = options.include;
+  if (include) {
+    const knownIds = new Set(POLICY_ASSET_MANIFEST.map((asset) => asset.id));
+    for (const id of include) {
+      if (!knownIds.has(id)) {
+        throw new TypeError(`Unknown policy asset id: ${id}`);
+      }
+    }
+  }
+  const selected = include
+    ? POLICY_ASSET_MANIFEST.filter((asset) => include.includes(asset.id))
+    : POLICY_ASSET_MANIFEST;
+
   await mkdir(options.destinationDirectory, { recursive: true });
 
   return Promise.all(
-    POLICY_ASSET_MANIFEST.map(async (descriptor) => {
+    selected.map(async (descriptor) => {
       const sourcePath = await resolvePackagedAssetPath(descriptor);
       const destinationPath = join(
         options.destinationDirectory,

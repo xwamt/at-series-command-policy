@@ -163,6 +163,32 @@ Allowlisted files:
 - `tree-sitter-bash.wasm`
 - `tree-sitter-python.wasm`
 
+##### Optional: dropping the Python grammar (size / accuracy trade-off)
+
+`copyPolicyAssets` accepts an `include` allowlist of asset ids. The
+default (no `include`) copies all three WASM files and keeps today's
+behavior exactly. A plugin that never needs embedded Python analysis can
+skip `tree-sitter-python.wasm` (~447KB):
+
+```js
+await copyPolicyAssets({
+  destinationDirectory: 'dist/policy-assets',
+  include: ['tree-sitter-runtime', 'tree-sitter-bash'],
+});
+```
+
+The cost is accuracy, never safety: with the grammar missing, every
+`python3 -c` payload fail-closes to `review` (reason code
+`shell.embedded_python_review`) instead of being analyzed — it can never
+become a false `allow`. Commands without an embedded Python payload
+(`uptime`, pipelines, `mysql -e`, …) are unaffected. Plugins that need
+embedded Python analysis must not use this filter.
+
+`tree-sitter-runtime` and `tree-sitter-bash` are **hard dependencies of
+the shell domain**: dropping either one makes every shell evaluation fail
+closed to `review` (`policy.initialization_failed`) — safe, but useless.
+Unknown asset ids throw a `TypeError` at build time.
+
 #### 3. Byte-level vs execution-level lazy loading
 
 A single-file bundle inlines every lazily imported sibling module —
