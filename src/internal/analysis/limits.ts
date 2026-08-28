@@ -31,7 +31,13 @@ export function inputExceedsLimit(
   sourceText: string,
   limits: PolicyAnalysisLimits,
 ): boolean {
-  return new TextEncoder().encode(sourceText).byteLength > limits.maxInputBytes;
+  // A UTF-16 code unit encodes to at most 3 UTF-8 bytes (a surrogate pair is
+  // 2 code units for 4 bytes), so short inputs can never exceed the byte
+  // limit and skip exact encoding entirely.
+  if (sourceText.length * 3 <= limits.maxInputBytes) {
+    return false;
+  }
+  return Buffer.byteLength(sourceText, 'utf8') > limits.maxInputBytes;
 }
 
 export class WorkBudget {
