@@ -221,16 +221,23 @@ async function analyzeMysql(
     : unknownEmbedded('mysql');
 }
 
+const respEncoder = new TextEncoder();
+
 function toResp(arguments_: readonly string[]): string {
-  const encoder = new TextEncoder();
   return [
     `*${arguments_.length}\r\n`,
     ...arguments_.flatMap((argument) => [
-      `$${encoder.encode(argument).byteLength}\r\n`,
+      `$${respEncoder.encode(argument).byteLength}\r\n`,
       `${argument}\r\n`,
     ]),
   ].join('');
 }
+
+const redisOutputModeOptions = new Set([
+  '--no-raw',
+  '--raw',
+  '--quoted-input',
+]);
 
 async function analyzeRedis(
   command: ShellCommandIr,
@@ -266,10 +273,7 @@ async function analyzeRedis(
       index += 1;
       continue;
     }
-    if (
-      !commandStarted &&
-      new Set(['--no-raw', '--raw', '--quoted-input']).has(argument)
-    ) {
+    if (!commandStarted && redisOutputModeOptions.has(argument)) {
       continue;
     }
     commandStarted = true;
