@@ -56,3 +56,29 @@ test('build subpath owns the asset-copying API', async () => {
     await rm(destinationDirectory, { recursive: true, force: true });
   }
 });
+
+test('copyPolicyAssets can copy an explicit asset subset', async () => {
+  const destinationDirectory = await mkdtemp(
+    join(tmpdir(), 'command-policy-subset-'),
+  );
+  try {
+    const copied = await build.copyPolicyAssets({
+      destinationDirectory,
+      include: ['tree-sitter-runtime', 'tree-sitter-bash'],
+    });
+    assert.deepEqual(
+      copied.map((asset) => asset.id),
+      ['tree-sitter-runtime', 'tree-sitter-bash'],
+    );
+    await assert.rejects(
+      readFile(join(destinationDirectory, 'tree-sitter-python.wasm')),
+      { code: 'ENOENT' },
+    );
+    await assert.rejects(
+      build.copyPolicyAssets({ destinationDirectory, include: ['no-such-asset'] }),
+      TypeError,
+    );
+  } finally {
+    await rm(destinationDirectory, { recursive: true, force: true });
+  }
+});

@@ -100,16 +100,57 @@ It never includes source text, cwd, or parser errors. Ranges are half-open
 ### Bundled consumers (VS Code / Electron)
 
 Default WASM resolution uses `import.meta.url` next to this package's
-`dist/assets/`. After you re-bundle into a single CJS file, that path is
-wrong. Copy the allowlist at build time and pass bytes or absolute paths:
+`dist/assets/`. After you re-bundle into a single CJS file, that URL is
+wrong (or empty), so a bundled consumer must own two things: the
+`import.meta.url` definition and the WASM asset paths.
+
+#### 1. esbuild recipe (`banner` + `define` are mandatory for CJS)
+
+```js
+import { build } from 'esbuild';
+
+await build({
+  entryPoints: ['src/policy-runtime.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  target: 'node18',
+  outfile: 'dist/policy-runtime.js',
+  banner: {
+    js: 'var __policyModuleUrl = require("node:url").pathToFileURL(__filename).href;',
+  },
+  define: { 'import.meta.url': '__policyModuleUrl' },
+});
+```
+
+> **Warning: skipping `banner`/`define` fails silently.** There is no build
+> error and no runtime exception. `import.meta.url` becomes empty in CJS
+> output, the embedded Python evaluator fails to initialize, and **every
+> `python3 -c` payload silently fail-closes to `review`** instead of being
+> analyzed. Plain shell commands keep working, so the misconfiguration is
+> very hard to notice. Keep the smoke assertion from step 5 in your CI.
+
+#### 2. WASM assets
+
+Copy the allowlist at build time, then resolve bytes or absolute paths at
+runtime through `assetResolver`:
+
+```js
+// Build script, next to the esbuild call above:
+import { copyPolicyAssets } from '@at-series/command-policy/build';
+
+await copyPolicyAssets({ destinationDirectory: 'dist/policy-assets' });
+```
 
 ```ts
-import { copyPolicyAssets } from '@at-series/command-policy/build';
+// Runtime (src/policy-runtime.ts). assetDir is the directory that
+// copyPolicyAssets populated, resolved relative to the bundled file
+// (__dirname works because the bundle above is CJS):
 import { createShellPolicyEvaluator } from '@at-series/command-policy/shell';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-await copyPolicyAssets({ destinationDirectory: 'dist/policy-assets' });
+const assetDir = join(__dirname, 'policy-assets');
 
 const evaluator = createShellPolicyEvaluator({
   assetResolver: (asset) => readFile(join(assetDir, asset.fileName)),
@@ -122,9 +163,90 @@ Allowlisted files:
 - `tree-sitter-bash.wasm`
 - `tree-sitter-python.wasm`
 
-If you emit CJS, define `import.meta.url` to `pathToFileURL(__filename).href`
-(or equivalent). Empty `import.meta` makes Tree-sitter initialization fail
-closed to `review`.
+##### Optional: dropping the Python grammar (size / accuracy trade-off)
+
+`copyPolicyAssets` accepts an `include` allowlist of asset ids. The
+default (no `include`) copies all three WASM files and keeps today's
+behavior exactly. A plugin that never needs embedded Python analysis can
+skip `tree-sitter-python.wasm` (~447KB):
+
+```js
+await copyPolicyAssets({
+  destinationDirectory: 'dist/policy-assets',
+  include: ['tree-sitter-runtime', 'tree-sitter-bash'],
+});
+```
+
+The cost is accuracy, never safety: with the grammar missing, every
+`python3 -c` payload fail-closes to `review` (reason code
+`shell.embedded_python_review`) instead of being analyzed — it can never
+become a false `allow`. Commands without an embedded Python payload
+(`uptime`, pipelines, `mysql -e`, …) are unaffected. Plugins that need
+embedded Python analysis must not use this filter.
+
+`tree-sitter-runtime` and `tree-sitter-bash` are **hard dependencies of
+the shell domain**: dropping either one makes every shell evaluation fail
+closed to `review` (`policy.initialization_failed`) — safe, but useless.
+Unknown asset ids throw a `TypeError` at build time.
+
+#### 3. Byte-level vs execution-level lazy loading
+
+A single-file bundle inlines every lazily imported sibling module —
+`./python.js`, `./sqlite.js`, `./mysql.js`, `./redis.js`, and
+`./tree-sitter-runtime.js` — so a shell-only bundle grows to roughly
+1.29MB (mostly the MySQL parser). **Execution-level lazy loading still
+holds**: a command with no embedded payload never executes those modules'
+initialization code. Only the byte boundary collapses.
+
+To keep the byte boundary too (for example, to keep the MySQL parser out
+of a VSIX), pick one of:
+
+- Mark the five sibling files external and copy the matching
+  `dist/*.js` / `dist/*.cjs` files next to your bundle:
+
+```js
+await build({
+  // ...same options as step 1...
+  external: [
+    '*/mysql.js',
+    '*/python.js',
+    '*/sqlite.js',
+    '*/redis.js',
+    '*/tree-sitter-runtime.js',
+  ],
+});
+```
+
+- Or emit ESM with `splitting: true` (esbuild code splitting does not
+  support CJS output).
+
+#### 4. Optional warmup
+
+`warmupShellPolicyEvaluator()` pre-initializes the Tree-sitter runtime and
+the bash grammar so the first `evaluate()` pays no cold-start cost
+(~18–20ms measured). Call it on extension activation; failures may be
+ignored because `evaluate()` fails closed to `review` on its own.
+
+```ts
+import { warmupShellPolicyEvaluator } from '@at-series/command-policy/shell';
+
+void warmupShellPolicyEvaluator({ assetResolver }).catch(() => {});
+```
+
+#### 5. Post-bundle smoke assertion (consumer CI)
+
+Run this against the **bundled** output. The second assertion is the guard
+for step 1: when `import.meta.url` is not defined, it reports `review`
+instead of `allow`.
+
+```js
+const evaluator = createShellPolicyEvaluator({ assetResolver });
+assert.equal((await evaluator.evaluate({ sourceText: 'uptime' })).action, 'allow');
+assert.equal(
+  (await evaluator.evaluate({ sourceText: 'python3 -c "print(1)"' })).action,
+  'allow', // review here means import.meta.url was not defined correctly
+);
+```
 
 ## Decision model
 
